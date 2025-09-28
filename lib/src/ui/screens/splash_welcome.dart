@@ -1,12 +1,30 @@
-// lib/src/ui/screens/splash_welcome.dart
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
-import '../theme.dart';              // 👈 IMPORTA EL THEME (welcomeKicker, kInk, pillBlue)
+import '../theme.dart';
 import 'choice_start.dart';
 
-class SplashWelcome extends StatelessWidget {
+// 👇 Importa tu servicio de permisos
+import 'package:whoami_app/services/permission_service.dart';
+
+class SplashWelcome extends StatefulWidget {
   const SplashWelcome({super.key});
   static const route = '/';
+
+  @override
+  State<SplashWelcome> createState() => _SplashWelcomeState();
+}
+
+class _SplashWelcomeState extends State<SplashWelcome> {
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    // Solo pedimos los permisos, nada más
+    await PermissionService.requestCameraAndGallery();
+  }
 
   @override
   Widget build(BuildContext context) {

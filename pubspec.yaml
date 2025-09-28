@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.2
+  sdk: ">=3.9.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -22,6 +22,17 @@ dependencies:
   # (Opcional) si los usas en tu app
   go_router: ^16.2.4
   provider: ^6.1.5+1
+
+  # --- Biometría / PIN ---
+  local_auth: ^2.3.0
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.2.3
+
+  # --- Cámara / Galería ---
+  image_picker: ^1.0.7
+
+  # --- Manejo de permisos ---
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

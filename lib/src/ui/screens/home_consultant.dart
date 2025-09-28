@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
 import '../theme.dart';
+import 'settings_page.dart'; // 👈 importa la vista de ajustes
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -30,21 +31,32 @@ class HomeConsultantPage extends StatelessWidget {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: IconButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            // 👇 Navegar a Ajustes
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SettingsPage()),
+                            );
+                          },
                           icon: const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
                       const BrandLogo(size: 120),
                       const SizedBox(height: 12),
-                      Text('Bienvenido $name',
+                      Text(
+                        'Bienvenido $name',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 28, fontWeight: FontWeight.w700, color: kInk,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: kInk,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text('Selecciona una opción',
-                          style: TextStyle(color: kGrey1)),
+                      const Text(
+                        'Selecciona una opción',
+                        style: TextStyle(color: kGrey1),
+                      ),
                       const SizedBox(height: 20),
 
                       _PillButton(
@@ -118,9 +130,14 @@ class _PillButton extends StatelessWidget {
             children: [
               Icon(icon, size: 24, color: kInk),
               const SizedBox(width: 12),
-              Text(text, style: const TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w700, color: kInk,
-              )),
+              Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: kInk,
+                ),
+              ),
             ],
           ),
         ),

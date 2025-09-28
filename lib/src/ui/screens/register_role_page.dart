@@ -1,3 +1,4 @@
+// lib/src/ui/screens/register_role_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -57,8 +58,15 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
           context: context,
           builder: (_) => AlertDialog(
             title: const Text('Cuenta creada'),
-            content: const Text('Tu cuenta se creó correctamente.'),
-            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Aceptar'))],
+            content: const Text(
+              'Tu cuenta se creó correctamente. Verifica tu correo electrónico antes de iniciar sesión.'
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Aceptar'),
+              )
+            ],
           ),
         );
       }
@@ -69,12 +77,39 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
       }
     } on FirebaseAuthException catch (e) {
       String msg = 'Ocurrió un problema.';
-      if (e.code == 'email-already-in-use') msg = 'Ese correo ya está en uso.';
-      else if (e.code == 'invalid-email')   msg = 'Correo inválido.';
-      else if (e.code == 'weak-password')   msg = 'La contraseña es muy débil.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      if (e.code == 'email-already-in-use') {
+        msg = 'Este correo ya está en uso. Intenta con otro.';
+      } else if (e.code == 'invalid-email') {
+        msg = 'El correo no es válido.';
+      } else if (e.code == 'weak-password') {
+        msg = 'La contraseña es muy débil.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            msg,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Error: $e',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -113,8 +148,14 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                               ),
                             ),
                             const Center(
-                              child: Text('Regístrate',
-                                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: kInk)),
+                              child: Text(
+                                'Regístrate',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: kInk,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -126,7 +167,11 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                       const Text(
                         'Selecciona un tipo\nde usuario',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: kInk),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: kInk,
+                        ),
                       ),
                       const SizedBox(height: 24),
 
@@ -137,7 +182,11 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                             style: pillLav(),
                             onPressed: _saving ? null : () => _finishSignUp('Cuidador'),
                             child: _saving
-                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator())
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(),
+                                )
                               : const Text('Cuidador'),
                           ),
                         ),
@@ -152,7 +201,11 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                             style: pillBlue(),
                             onPressed: _saving ? null : () => _finishSignUp('Consultante'),
                             child: _saving
-                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator())
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(),
+                                )
                               : const Text('Consultante'),
                           ),
                         ),

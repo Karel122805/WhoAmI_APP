@@ -1,3 +1,4 @@
+// lib/src/ui/screens/register_password_page.dart
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
 import '../theme.dart';
@@ -64,8 +65,14 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                                 ),
                               ),
                               const Center(
-                                child: Text('Regístrate',
-                                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: kInk)),
+                                child: Text(
+                                  'Regístrate',
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w700,
+                                    color: kInk,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -122,9 +129,9 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                                   context,
                                   RegisterRolePage.route,
                                   arguments: {
-                                    ...prev,                       // nombre, apellidos, birthday
-                                    'email': _email.text.trim(),   // correo
-                                    'password': _pass.text,
+                                    ...prev,                               // nombre, apellidos, birthday (paso previo)
+                                    'email': _email.text.trim().toLowerCase(), // correo normalizado
+                                    'password': _pass.text,               // contraseña
                                   },
                                 );
                               },

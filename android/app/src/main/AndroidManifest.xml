@@ -1,10 +1,34 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- PERMISOS (fuera de <application>) -->
+    <!-- ====== PERMISOS (van FUERA de <application>) ====== -->
+
+    <!-- Red / Firebase -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Opcional, para saber si hay red -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Cámara -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Notificaciones (Android 13+, se pide en runtime también) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Lectura de fotos/galería:
+         - Android 13+ usa READ_MEDIA_IMAGES
+         - Android 12- usa READ_EXTERNAL_STORAGE (capada a API 32 con maxSdkVersion) -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:targetApi="33" />
+
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- (Opcional) Declarar que la cámara es requerida.
+         Si tu app debería funcionar sin cámara, elimina required="true". -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- ====== APLICACIÓN ====== -->
     <application
         android:name="${applicationName}"
         android:label="whoami_app"
@@ -31,13 +55,24 @@
             </intent-filter>
         </activity>
 
+        <!-- FileProvider para pasar URIs seguras a la cámara / compartir archivos -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- No borrar: usado por Flutter para registrar plugins -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
 
-    <!-- Consultas requeridas por el engine para procesar texto -->
+    <!-- Consultas requeridas por el engine para procesar texto (opcional) -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />

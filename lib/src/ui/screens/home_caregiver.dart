@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
 import '../theme.dart';
+import 'settings_page.dart'; // 👈 importa la vista de Ajustes
 
 class HomeCaregiverPage extends StatelessWidget {
   const HomeCaregiverPage({super.key, this.displayName});
@@ -27,20 +28,28 @@ class HomeCaregiverPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Engrane (placeholder)
+                      // Engrane (ahora abre Ajustes)
                       Align(
                         alignment: Alignment.centerLeft,
                         child: IconButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SettingsPage()),
+                            );
+                          },
                           icon: const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
                       const BrandLogo(size: 120),
                       const SizedBox(height: 12),
-                      Text('Bienvenido $name',
+                      Text(
+                        'Bienvenido $name',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 28, fontWeight: FontWeight.w700, color: kInk,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: kInk,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -125,9 +134,14 @@ class _PillButton extends StatelessWidget {
             children: [
               Icon(icon, size: 24, color: kInk),
               const SizedBox(width: 12),
-              Text(text, style: const TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w700, color: kInk,
-              )),
+              Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: kInk,
+                ),
+              ),
             ],
           ),
         ),
