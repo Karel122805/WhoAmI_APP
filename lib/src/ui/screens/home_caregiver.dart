@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
 import '../theme.dart';
-import 'settings_page.dart'; // 👈 importa la vista de Ajustes
+import 'settings_page.dart'; 
 
 class HomeCaregiverPage extends StatelessWidget {
   const HomeCaregiverPage({super.key, this.displayName});

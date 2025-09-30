@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ====== PERMISOS (van FUERA de <application>) ====== -->
+    <!-- ====== PERMISOS (fuera de <application>) ====== -->
 
     <!-- Red / Firebase -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -10,23 +10,28 @@
     <!-- Cámara -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Notificaciones (Android 13+, se pide en runtime también) -->
+    <!-- Notificaciones (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Lectura de fotos/galería:
-         - Android 13+ usa READ_MEDIA_IMAGES
-         - Android 12- usa READ_EXTERNAL_STORAGE (capada a API 32 con maxSdkVersion) -->
+         Android 13+ -> READ_MEDIA_IMAGES
+         Android 12 o menor -> READ_EXTERNAL_STORAGE (capada a API 32) -->
     <uses-permission
         android:name="android.permission.READ_MEDIA_IMAGES"
         tools:targetApi="33" />
-
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- (Opcional) Declarar que la cámara es requerida.
-         Si tu app debería funcionar sin cámara, elimina required="true". -->
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Biometría (para local_auth) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Compat con dispositivos antiguos -->
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+
+    <!-- Declara la cámara como NO requerida para que la app pueda instalarse sin cámara -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <!-- ====== APLICACIÓN ====== -->
     <application
@@ -55,7 +60,7 @@
             </intent-filter>
         </activity>
 
-        <!-- FileProvider para pasar URIs seguras a la cámara / compartir archivos -->
+        <!-- FileProvider para URIs seguras (cámara/compartir archivos) -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -72,7 +77,7 @@
             android:value="2" />
     </application>
 
-    <!-- Consultas requeridas por el engine para procesar texto (opcional) -->
+    <!-- (Opcional) Consultas que usa el engine para procesar texto -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />

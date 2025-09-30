@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
 import '../theme.dart';
-import 'settings_page.dart'; // 👈 importa la vista de ajustes
+import 'settings_page.dart'; 
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});

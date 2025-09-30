@@ -4,7 +4,7 @@ plugins {
     id("com.google.gms.google-services")
     // END: FlutterFire Configuration
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // El plugin de Flutter debe ir después de Android y Kotlin
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -24,6 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.whoami_app"
+        // 👇 Aseguramos compatibilidad biométrica
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -42,5 +43,6 @@ flutter {
 }
 
 dependencies {
-    implementation("androidx.biometric:biometric:1.2.0-alpha05") // 👈 aquí la dependencia
+    // Dependencia para biometría
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
 }
