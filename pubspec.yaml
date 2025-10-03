@@ -1,11 +1,11 @@
 name: whoami_app
-description: "A new Flutter project."
+description: "Who Am I – app móvil"
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.9.0 <4.0.0"
+  sdk: ">=3.3.0 <4.0.0"   # compatible con Flutter/Dart estables actuales
 
 dependencies:
   flutter:
@@ -19,7 +19,7 @@ dependencies:
   firebase_storage: ^12.1.0
   google_sign_in: ^6.2.1
 
-  # (Opcional) si los usas en tu app
+  # --- Navegación / estado ---
   go_router: ^16.2.4
   provider: ^6.1.5+1
 
@@ -30,6 +30,9 @@ dependencies:
 
   # --- Cámara / Galería ---
   image_picker: ^1.0.7
+
+  # --- Texto a voz para Consejos ---
+  flutter_tts: ^3.8.5
 
   # --- Manejo de permisos ---
   permission_handler: ^11.3.1
@@ -42,4 +45,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/logo.png
+    - assets/          # incluye logo.png, bot.gif, etc. dentro de /assets

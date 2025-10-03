@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
 import '../theme.dart';
-import 'settings_page.dart'; 
+import 'settings_page.dart';
+
+// 👇 Importa la vista de Consejos
+import 'tips_page.dart';
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -16,7 +19,8 @@ class HomeConsultantPage extends StatelessWidget {
         : 'Usuario';
 
     return MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1)),
+      data: MediaQuery.of(context)
+          .copyWith(textScaler: const TextScaler.linear(1)),
       child: Scaffold(
         body: SafeArea(
           child: Center(
@@ -35,7 +39,8 @@ class HomeConsultantPage extends StatelessWidget {
                             // 👇 Navegar a Ajustes
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const SettingsPage()),
+                              MaterialPageRoute(
+                                  builder: (_) => const SettingsPage()),
                             );
                           },
                           icon: const Icon(Icons.settings, color: kInk, size: 28),
@@ -59,29 +64,44 @@ class HomeConsultantPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 20),
 
+                      // >>> BOTONES
                       _PillButton(
                         color: kBlue,
                         icon: Icons.menu_book_outlined,
                         text: 'Consejos',
-                        onTap: () {},
+                        onTap: () {
+                          // 👇 Navega a la vista de Consejos
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const TipsPage(),
+                            ),
+                          );
+                        },
                       ),
                       _PillButton(
                         color: kBlue,
                         icon: Icons.auto_stories_outlined,
                         text: 'Frases motivadoras',
-                        onTap: () {},
+                        onTap: () {
+                          // TODO: Conectar a la vista de Frases motivadoras
+                        },
                       ),
                       _PillButton(
                         color: kBlue,
                         icon: Icons.event_note_outlined,
                         text: 'Calendario de recuerdos',
-                        onTap: () {},
+                        onTap: () {
+                          // TODO: Conectar a la vista de Calendario
+                        },
                       ),
                       _PillButton(
                         color: kBlue,
                         icon: Icons.chat_bubble_outline,
                         text: 'ChatWhoAmI',
-                        onTap: () {},
+                        onTap: () {
+                          // TODO: Conectar a la vista de Chat
+                        },
                       ),
 
                       const SizedBox(height: 24),

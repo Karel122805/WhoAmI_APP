@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../brand_logo.dart';
 import '../theme.dart';
-import 'settings_page.dart'; 
+import 'settings_page.dart';
+
+// 👇 Importa la vista de Guías rápidas (cuidador)
+import 'quick_guides_page.dart';
 
 class HomeCaregiverPage extends StatelessWidget {
   const HomeCaregiverPage({super.key, this.displayName});
@@ -28,7 +31,7 @@ class HomeCaregiverPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Engrane (ahora abre Ajustes)
+                      // Engrane -> Ajustes
                       Align(
                         alignment: Alignment.centerLeft,
                         child: IconButton(
@@ -53,39 +56,54 @@ class HomeCaregiverPage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text('Selecciona una opción',
-                          style: TextStyle(color: kGrey1)),
+                      const Text('Selecciona una opción', style: TextStyle(color: kGrey1)),
                       const SizedBox(height: 20),
 
                       _PillButton(
                         color: kPurple,
                         icon: Icons.person_add_outlined,
                         text: 'Registrar paciente',
-                        onTap: () {},
+                        onTap: () {
+                          // TODO: conectar a registrar paciente
+                        },
                       ),
                       _PillButton(
                         color: kPurple,
                         icon: Icons.people_outline,
                         text: 'Ver pacientes',
-                        onTap: () {},
+                        onTap: () {
+                          // TODO: conectar a ver pacientes
+                        },
                       ),
+
+                      // 👉 Guías Rápidas (navega a QuickGuidesPage)
                       _PillButton(
                         color: kPurple,
                         icon: Icons.menu_book_outlined,
                         text: 'Guías Rápidas',
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const QuickGuidesPage()),
+                          );
+                        },
                       ),
+
                       _PillButton(
                         color: kPurple,
                         icon: Icons.event_note_outlined,
                         text: 'Calendario de Recuerdos',
-                        onTap: () {},
+                        onTap: () {
+                          // TODO: conectar a calendario
+                        },
                       ),
                       _PillButton(
                         color: kPurple,
                         icon: Icons.chat_bubble_outline,
                         text: 'ChatWhoAmI',
-                        onTap: () {},
+                        onTap: () {
+                          // TODO: conectar a chat
+                        },
                       ),
 
                       const SizedBox(height: 24),
@@ -149,3 +167,4 @@ class _PillButton extends StatelessWidget {
     );
   }
 }
+
