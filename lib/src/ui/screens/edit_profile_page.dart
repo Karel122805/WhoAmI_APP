@@ -16,19 +16,25 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  // Solo lectura
+  // Controllers
   final _firstName = TextEditingController();
   final _lastName  = TextEditingController();
   final _email     = TextEditingController();
   final _dobCtrl   = TextEditingController(); // dd/mm/aaaa
 
+  // Estado
+  bool _loading = true;
+  bool _saving  = false;
+  bool _dirty   = false;
+  bool _isCaregiver = false; // <- 🔑 habilita edición de texto/fecha
+
+  // Datos
   DateTime? _birthDate;
   String? _photoUrl;
   File? _localPhoto;
 
-  bool _loading = true;
-  bool _saving  = false;
-  bool _dirty   = false;
+  // Originales para restaurar/cotejar
+  late Map<String, String?> _original; // birthDate en ISO-8601
 
   @override
   void initState() {
@@ -46,14 +52,28 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _email.text     = user.email ?? '';
     _photoUrl       = user.photoURL;
 
-    // === Fecha de nacimiento: probamos varias claves y formatos ===
-    dynamic rawDob = data['birthDate'] ?? data['birthday'] ?? data['dob'] ?? data['dateOfBirth'];
-    _birthDate = _parseBirthDate(rawDob);
+    // rol
+    final role = (data['role'] as String?)?.trim() ?? 'Consultante';
+    _isCaregiver = role == 'Cuidador';
 
-    if (_birthDate != null) {
-      _dobCtrl.text = _fmt(_birthDate!);
-    } else {
-      _dobCtrl.text = '';
+    // fecha de nacimiento desde distintos formatos/campos
+    final rawDob = data['birthDate'] ?? data['birthday'] ?? data['dob'] ?? data['dateOfBirth'];
+    _birthDate = _parseBirthDate(rawDob);
+    _dobCtrl.text = _birthDate == null ? '' : _fmt(_birthDate!);
+
+    _original = {
+      'firstName': _firstName.text,
+      'lastName' : _lastName.text,
+      'email'    : _email.text,
+      'photo'    : _photoUrl,
+      'birthDate': _birthDate?.toIso8601String(),
+    };
+
+    // Escuchar cambios de texto solo si Cuidador
+    if (_isCaregiver) {
+      for (final c in [_firstName, _lastName, _dobCtrl]) {
+        c.addListener(_recomputeDirty);
+      }
     }
 
     setState(() => _loading = false);
@@ -69,25 +89,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (raw is Timestamp) return raw.toDate();
     } catch (_) {}
     if (raw is int) {
-      try {
-        // Asumimos milisegundos desde epoch
-        return DateTime.fromMillisecondsSinceEpoch(raw);
-      } catch (_) {}
+      try { return DateTime.fromMillisecondsSinceEpoch(raw); } catch (_) {}
     }
     if (raw is String) {
-      // Intenta ISO-8601 (como se envió desde el registro)
-      try {
-        return DateTime.parse(raw);
-      } catch (_) {
-        // dd/MM/yyyy
-        final parts = raw.split('/');
-        if (parts.length == 3) {
-          final d = int.tryParse(parts[0]);
-          final m = int.tryParse(parts[1]);
-          final y = int.tryParse(parts[2]);
-          if (d != null && m != null && y != null) {
-            return DateTime(y, m, d);
-          }
+      try { return DateTime.parse(raw); } catch (_) {
+        final p = raw.split('/');
+        if (p.length == 3) {
+          final d = int.tryParse(p[0]);
+          final m = int.tryParse(p[1]);
+          final y = int.tryParse(p[2]);
+          if (d != null && m != null && y != null) return DateTime(y, m, d);
         }
       }
     }
@@ -95,14 +106,63 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   void _recomputeDirty() {
-    final newDirty = _localPhoto != null; // 🔐 solo la foto es editable
-    if (newDirty != _dirty) setState(() => _dirty = newDirty);
+    final photoChanged = _localPhoto != null;
+    if (_isCaregiver) {
+      final birthIso = _birthDate?.toIso8601String();
+      final textChanged =
+          _firstName.text != (_original['firstName'] ?? '') ||
+          _lastName.text  != (_original['lastName']  ?? '') ||
+          birthIso        != (_original['birthDate']);
+      final newDirty = textChanged || photoChanged;
+      if (newDirty != _dirty) setState(() => _dirty = newDirty);
+    } else {
+      final newDirty = photoChanged;
+      if (newDirty != _dirty) setState(() => _dirty = newDirty);
+    }
+  }
+
+  String? _nameRule(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'Requerido';
+    if (s.length < 2) return 'Muy corto';
+    return null;
+  }
+
+  String? _dobRule(String? _) {
+    if (!_isCaregiver) return null;
+    if (_birthDate == null) return 'Selecciona tu fecha de nacimiento';
+    final now = DateTime.now();
+    if (_birthDate!.isAfter(now)) return 'Fecha inválida';
+    // límites razonables
+    if (_birthDate!.year < 1900) return 'Fecha inválida';
+    return null;
   }
 
   Future<void> _pickPhoto() async {
     final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (img != null) {
       setState(() => _localPhoto = File(img.path));
+      _recomputeDirty();
+    }
+  }
+
+  Future<void> _pickBirthDate() async {
+    if (!_isCaregiver) return;
+    final now = DateTime.now();
+    final initial = _birthDate ?? DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      locale: const Locale('es'),
+      initialDate: initial,
+      firstDate: DateTime(1900, 1, 1),
+      lastDate: now,
+      helpText: 'Selecciona tu fecha de nacimiento',
+    );
+    if (picked != null) {
+      setState(() {
+        _birthDate = DateTime(picked.year, picked.month, picked.day);
+        _dobCtrl.text = _fmt(_birthDate!);
+      });
       _recomputeDirty();
     }
   }
@@ -114,19 +174,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return await ref.getDownloadURL();
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool exitAfter = false}) async {
     if (!_dirty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes modificar tu foto para poder guardar.')),
+        const SnackBar(content: Text('No hay cambios para guardar.')),
       );
       return;
     }
 
     setState(() => _saving = true);
-
     final user = FirebaseAuth.instance.currentUser!;
     try {
-      // Solo foto
+      // Foto
       if (_localPhoto != null) {
         final url = await _uploadPhoto(user);
         _photoUrl = url;
@@ -137,8 +196,43 @@ class _EditProfilePageState extends State<EditProfilePage> {
             .set({'photoURL': url}, SetOptions(merge: true));
       }
 
+      // Datos si Cuidador
+      if (_isCaregiver) {
+        final updates = <String, dynamic>{};
+        if (_firstName.text.trim() != (_original['firstName'] ?? '')) {
+          updates['firstName'] = _firstName.text.trim();
+        }
+        if (_lastName.text.trim() != (_original['lastName'] ?? '')) {
+          updates['lastName'] = _lastName.text.trim();
+        }
+        if (_birthDate?.toIso8601String() != _original['birthDate']) {
+          updates['birthDate'] = _birthDate; // Firestore Timestamp
+        }
+        if (updates.isNotEmpty) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set(updates, SetOptions(merge: true));
+        }
+
+        // Actualiza displayName si cambió
+        final newDisplayName = '${_firstName.text.trim()} ${_lastName.text.trim()}'.trim();
+        if (newDisplayName != ((user.displayName ?? '').trim())) {
+          await user.updateDisplayName(newDisplayName);
+        }
+      }
+
+      // Refrescar originales/estado
+      _original = {
+        'firstName': _firstName.text.trim(),
+        'lastName' : _lastName.text.trim(),
+        'email'    : _email.text.trim(),
+        'photo'    : _photoUrl,
+        'birthDate': _birthDate?.toIso8601String(),
+      };
       _localPhoto = null;
       _recomputeDirty();
+
       await user.reload();
 
       // ✅ Snackbar verde pastel
@@ -152,58 +246,114 @@ class _EditProfilePageState extends State<EditProfilePage> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-    } catch (_) {
+
+      if (exitAfter && mounted) Navigator.maybePop(context);
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudieron guardar los cambios.')),
+        SnackBar(content: Text('No se pudieron guardar los cambios. $e')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _cancel() async {
+  // ===== Diálogos =====
+  Future<bool> _confirmBeforeLeave() async {
+    if (!_dirty) return true;
+
+    final action = await showDialog<_LeaveAction>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Tienes cambios sin guardar'),
+        content: const Text('Debes elegir una opción antes de salir.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, _LeaveAction.keepEditing),
+            child: const Text('Seguir editando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, _LeaveAction.discard),
+            child: const Text('Cancelar cambios'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFD6A7F4),
+              foregroundColor: Colors.white,
+              shape: const StadiumBorder(),
+            ),
+            onPressed: () => Navigator.pop(context, _LeaveAction.saveAndExit),
+            child: const Text('Guardar y salir'),
+          ),
+        ],
+      ),
+    );
+
+    switch (action) {
+      case _LeaveAction.discard:
+        _restoreOriginal();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cambios descartados.')),
+        );
+        return true;
+      case _LeaveAction.saveAndExit:
+        await _save(exitAfter: true);
+        return false; // _save ya intenta salir
+      case _LeaveAction.keepEditing:
+      default:
+        return false;
+    }
+  }
+
+  Future<void> _confirmDiscardInline() async {
     if (!_dirty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No hay cambios para cancelar.')),
       );
       return;
     }
-
-    final confirm = await showDialog<bool>(
+    final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Cancelar cambios'),
-        content: const Text(
-          '¿Deseas cancelar tus cambios? Los campos volverán a su estado original y permanecerás en esta pantalla.',
-        ),
+        content: const Text('Tienes cambios sin guardar. Debes Guardar o Cancelar antes de salir.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Seguir editando'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFD6A7F4),
               foregroundColor: Colors.white,
               shape: const StadiumBorder(),
             ),
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Cancelar cambios'),
           ),
         ],
       ),
     );
-
-    if (confirm == true) {
-      _localPhoto = null;
-      _recomputeDirty();
+    if (ok == true) {
+      _restoreOriginal();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cambios descartados.')),
       );
     }
   }
 
-  // 📩 Solicitar cambio de contraseña (reutiliza “Olvidé mi contraseña”)
+  void _restoreOriginal() {
+    _firstName.text = _original['firstName'] ?? '';
+    _lastName.text  = _original['lastName']  ?? '';
+    _email.text     = _original['email']     ?? '';
+    _photoUrl       = _original['photo'];
+    final origDob = _original['birthDate'];
+    _birthDate = (origDob == null) ? null : DateTime.tryParse(origDob);
+    _dobCtrl.text = _birthDate == null ? '' : _fmt(_birthDate!);
+    _localPhoto = null;
+    _recomputeDirty();
+  }
+
+  // 📩 Solicitar cambio de contraseña
   Future<void> _requestPasswordReset() async {
     final email = _email.text.trim().toLowerCase();
     if (email.isEmpty) {
@@ -212,11 +362,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
       return;
     }
-
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-
-      // Aviso visual + diálogo
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: const Color(0xFFB2DFDB),
@@ -227,7 +374,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-
       if (!mounted) return;
       showDialog(
         context: context,
@@ -235,7 +381,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           title: const Text('Revisa tu correo'),
           content: Text(
             'Te enviamos un formulario para cambiar tu contraseña a:\n\n$email\n\n'
-            'Si no lo ves en tu bandeja de entrada, revisa también SPAM.',
+            'Si no lo ves, revisa también SPAM.',
           ),
           actions: [
             TextButton(
@@ -259,207 +405,215 @@ class _EditProfilePageState extends State<EditProfilePage> {
   // ===== UI =====
   @override
   Widget build(BuildContext context) {
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
-      child: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: _loading
-                  ? const Padding(
-                      padding: EdgeInsets.only(top: 80),
-                      child: CircularProgressIndicator(),
-                    )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 56,
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  left: 0, top: 8,
-                                  child: IconButton.filled(
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: const Color(0xFFEAEAEA),
-                                      shape: const CircleBorder(),
-                                      fixedSize: const Size(40, 40),
+    return WillPopScope(
+      onWillPop: _confirmBeforeLeave,
+      child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
+        child: Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: _loading
+                    ? const Padding(
+                        padding: EdgeInsets.only(top: 80),
+                        child: CircularProgressIndicator(),
+                      )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 56,
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    left: 0, top: 8,
+                                    child: IconButton.filled(
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: const Color(0xFFEAEAEA),
+                                        shape: const CircleBorder(),
+                                        fixedSize: const Size(40, 40),
+                                      ),
+                                      onPressed: () async {
+                                        final canLeave = await _confirmBeforeLeave();
+                                        if (canLeave && mounted) Navigator.maybePop(context);
+                                      },
+                                      icon: const Icon(Icons.arrow_back, color: kInk),
                                     ),
-                                    onPressed: () async {
-                                      if (_dirty) {
-                                        await _cancel();
-                                      } else {
-                                        Navigator.maybePop(context);
-                                      }
-                                    },
-                                    icon: const Icon(Icons.arrow_back, color: kInk),
+                                  ),
+                                  const Center(
+                                    child: Text(
+                                      'Perfil',
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w700,
+                                        color: kInk,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // FOTO (siempre editable)
+                            Center(
+                              child: Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 52,
+                                    backgroundImage: _localPhoto != null
+                                        ? FileImage(_localPhoto!)
+                                        : (_photoUrl != null ? NetworkImage(_photoUrl!) : null)
+                                            as ImageProvider<Object>?,
+                                    child: (_localPhoto == null && _photoUrl == null)
+                                        ? const Icon(Icons.person, size: 48, color: Colors.white)
+                                        : null,
+                                    backgroundColor: Colors.black,
+                                  ),
+                                  Material(
+                                    color: const Color(0xFFD6A7F4),
+                                    shape: const CircleBorder(),
+                                    elevation: 3,
+                                    child: InkWell(
+                                      customBorder: const CircleBorder(),
+                                      onTap: _pickPhoto,
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(10),
+                                        child: Icon(Icons.photo_camera_outlined, color: Colors.white, size: 22),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 18),
+
+                            // Campos (habilitados sólo si Cuidador)
+                            TextField(
+                              controller: _firstName,
+                              enabled: _isCaregiver,
+                              decoration: const InputDecoration(
+                                labelText: 'Nombre',
+                                border: OutlineInputBorder(),
+                              ),
+                              onChanged: (_) => _recomputeDirty(),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _lastName,
+                              enabled: _isCaregiver,
+                              decoration: const InputDecoration(
+                                labelText: 'Apellidos',
+                                border: OutlineInputBorder(),
+                              ),
+                              onChanged: (_) => _recomputeDirty(),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Fecha de nacimiento
+                            TextField(
+                              controller: _dobCtrl,
+                              readOnly: true,
+                              enabled: _isCaregiver,
+                              decoration: const InputDecoration(
+                                labelText: 'Fecha de nacimiento',
+                                border: OutlineInputBorder(),
+                                suffixIcon: Icon(Icons.calendar_today),
+                              ),
+                              onTap: _isCaregiver ? _pickBirthDate : null,
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Correo (siempre solo lectura)
+                            TextField(
+                              controller: _email,
+                              enabled: false,
+                              decoration: const InputDecoration(
+                                labelText: 'Correo electrónico',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+
+                            const SizedBox(height: 22),
+                            const Divider(),
+                            const SizedBox(height: 10),
+
+                            // Solicitar cambio de contraseña
+                            SizedBox(
+                              height: 52,
+                              child: FilledButton.icon(
+                                style: pillLav(),
+                                onPressed: _requestPasswordReset,
+                                icon: const Icon(Icons.lock_reset),
+                                label: const Text('Solicitar cambio de contraseña'),
+                              ),
+                            ),
+
+                            const SizedBox(height: 22),
+
+                            // Botones Guardar / Cancelar
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: _dirty ? _confirmDiscardInline : null,
+                                    icon: const Icon(Icons.close_rounded, color: Colors.black),
+                                    label: const Text(
+                                      'Cancelar',
+                                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFF9EA3),
+                                      disabledBackgroundColor: const Color(0x55FF9EA3),
+                                      shape: const StadiumBorder(),
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                    ),
                                   ),
                                 ),
-                                const Center(
-                                  child: Text(
-                                    'Perfil',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w700,
-                                      color: kInk,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: (_saving || !_dirty) ? null : () => _save(),
+                                    icon: _saving
+                                        ? const SizedBox(
+                                            width: 18, height: 18,
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                                          )
+                                        : const Icon(Icons.save_outlined, color: Colors.black),
+                                    label: Text(
+                                      _saving ? 'Guardando...' : 'Guardar',
+                                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF9ED3FF),
+                                      disabledBackgroundColor: const Color(0x559ED3FF),
+                                      shape: const StadiumBorder(),
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 16),
 
-                          // FOTO DE PERFIL (único editable)
-                          Center(
-                            child: Stack(
-                              alignment: Alignment.bottomRight,
-                              children: [
-                                CircleAvatar(
-                                  radius: 52,
-                                  backgroundImage: _localPhoto != null
-                                      ? FileImage(_localPhoto!)
-                                      : (_photoUrl != null ? NetworkImage(_photoUrl!) : null)
-                                          as ImageProvider<Object>?,
-                                  child: (_localPhoto == null && _photoUrl == null)
-                                      ? const Icon(Icons.person, size: 48, color: Colors.white)
-                                      : null,
-                                  backgroundColor: Colors.black,
-                                ),
-                                // Botón cámara morado
-                                Material(
-                                  color: const Color(0xFFD6A7F4),
-                                  shape: const CircleBorder(),
-                                  elevation: 3,
-                                  child: InkWell(
-                                    customBorder: const CircleBorder(),
-                                    onTap: _pickPhoto,
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: Icon(Icons.photo_camera_outlined, color: Colors.white, size: 22),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 18),
-
-                          // Campos en solo lectura (Edad eliminado)
-                          TextField(
-                            controller: _firstName,
-                            enabled: false,
-                            decoration: const InputDecoration(
-                              labelText: 'Nombre',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _lastName,
-                            enabled: false,
-                            decoration: const InputDecoration(
-                              labelText: 'Apellidos',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _dobCtrl,
-                            enabled: false,
-                            decoration: const InputDecoration(
-                              labelText: 'Fecha de nacimiento',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _email,
-                            enabled: false,
-                            decoration: const InputDecoration(
-                              labelText: 'Correo electrónico',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-
-                          const SizedBox(height: 22),
-                          const Divider(),
-                          const SizedBox(height: 10),
-
-                          // Botón para solicitar cambio de contraseña (flujo "olvidé mi contraseña")
-                          SizedBox(
-                            height: 52,
-                            child: FilledButton.icon(
-                              style: pillLav(), // tu estilo lavanda
-                              onPressed: _requestPasswordReset,
-                              icon: const Icon(Icons.lock_reset),
-                              label: const Text('Solicitar cambio de contraseña'),
-                            ),
-                          ),
-
-                          const SizedBox(height: 22),
-
-                          // Botones Guardar / Cancelar (solo foto)
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _dirty ? _cancel : null,
-                                  icon: const Icon(Icons.close_rounded, color: Colors.black),
-                                  label: const Text(
-                                    'Cancelar',
-                                    style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
-                                  ),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFFFF9EA3),
-                                    disabledBackgroundColor: const Color(0x55FF9EA3),
-                                    shape: const StadiumBorder(),
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                  ),
-                                ),
+                            const SizedBox(height: 8),
+                            if (!_dirty && !_saving)
+                              const Text(
+                                'Modifica tus datos para habilitar Guardar y Cancelar.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: (_saving || !_dirty) ? null : _save,
-                                  icon: _saving
-                                      ? const SizedBox(
-                                          width: 18, height: 18,
-                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                                        )
-                                      : const Icon(Icons.save_outlined, color: Colors.black),
-                                  label: Text(
-                                    _saving ? 'Guardando...' : 'Guardar',
-                                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
-                                  ),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFF9ED3FF),
-                                    disabledBackgroundColor: const Color(0x559ED3FF),
-                                    shape: const StadiumBorder(),
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
 
-                          const SizedBox(height: 8),
-                          if (!_dirty && !_saving)
-                            const Text(
-                              'Modifica tu foto para habilitar Guardar y Cancelar.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 12, color: Color(0xFF8A8A8A)),
-                            ),
-
-                          const SizedBox(height: 28),
-                        ],
+                            const SizedBox(height: 28),
+                          ],
+                        ),
                       ),
-                    ),
+              ),
             ),
           ),
         ),
@@ -476,3 +630,5 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 }
+
+enum _LeaveAction { keepEditing, discard, saveAndExit }

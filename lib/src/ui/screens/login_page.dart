@@ -556,7 +556,15 @@ class _LoginPageState extends State<LoginPage> {
                                     shape: const CircleBorder(),
                                     fixedSize: const Size(40, 40),
                                   ),
-                                  onPressed: () => Navigator.maybePop(context),
+                                  onPressed: () {
+                                    // 👇 Ir siempre a ChoiceStart y limpiar el stack
+                                    FocusScope.of(context).unfocus();
+                                    Navigator.pushNamedAndRemoveUntil(
+                                      context,
+                                      '/choice',
+                                      (_) => false,
+                                    );
+                                  },
                                   icon: const Icon(Icons.arrow_back, color: kInk),
                                 ),
                               ),

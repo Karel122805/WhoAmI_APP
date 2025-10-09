@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../brand_logo.dart';
 import '../theme.dart';
 import 'settings_page.dart';
@@ -6,18 +9,19 @@ import 'settings_page.dart';
 // 👇 Importa la vista de Guías rápidas (cuidador)
 import 'quick_guides_page.dart';
 
-class HomeCaregiverPage extends StatelessWidget {
+class HomeCaregiverPage extends StatefulWidget {
   const HomeCaregiverPage({super.key, this.displayName});
   static const route = '/home/caregiver';
 
   final String? displayName;
 
   @override
-  Widget build(BuildContext context) {
-    final name = (displayName?.trim().isNotEmpty ?? false)
-        ? displayName!.trim()
-        : 'Cuidador';
+  State<HomeCaregiverPage> createState() => _HomeCaregiverPageState();
+}
 
+class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
+  @override
+  Widget build(BuildContext context) {
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1)),
       child: Scaffold(
@@ -46,15 +50,67 @@ class HomeCaregiverPage extends StatelessWidget {
                       ),
                       const BrandLogo(size: 120),
                       const SizedBox(height: 12),
-                      Text(
-                        'Bienvenido $name',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          color: kInk,
-                        ),
+
+                      // 👉 Nombre que reacciona a cambios de Auth y Firestore
+                      StreamBuilder<User?>(
+                        stream: FirebaseAuth.instance.userChanges(),
+                        builder: (context, authSnap) {
+                          final user = authSnap.data ?? FirebaseAuth.instance.currentUser;
+                          if (user == null) {
+                            return const SizedBox();
+                          }
+                          final uid = user.uid;
+
+                          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(uid)
+                                .snapshots(),
+                            builder: (context, docSnap) {
+                              String name = 'Cuidador';
+
+                              // 1) Firestore first/last (preferido)
+                              if (docSnap.hasData && docSnap.data!.data() != null) {
+                                final data = docSnap.data!.data()!;
+                                final first = (data['firstName'] as String?)?.trim() ?? '';
+                                final last  = (data['lastName']  as String?)?.trim() ?? '';
+                                final fsName = [first, last]
+                                    .where((e) => e.isNotEmpty)
+                                    .join(' ');
+                                if (fsName.isNotEmpty) name = fsName;
+                              }
+
+                              // 2) Fallback a displayName de Auth
+                              if (name == 'Cuidador') {
+                                final dn = (user.displayName ?? '').trim();
+                                if (dn.isNotEmpty) name = dn;
+                              }
+
+                              // 3) Fallback a parte local del correo
+                              if (name == 'Cuidador') {
+                                final mail = user.email ?? '';
+                                if (mail.contains('@')) {
+                                  name = mail.split('@').first;
+                                }
+                              }
+
+                              // 4) Fallback final
+                              name = name.isNotEmpty ? name : (widget.displayName ?? 'Cuidador');
+
+                              return Text(
+                                'Bienvenido $name',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: kInk,
+                                ),
+                              );
+                            },
+                          );
+                        },
                       ),
+
                       const SizedBox(height: 8),
                       const Text('Selecciona una opción', style: TextStyle(color: kGrey1)),
                       const SizedBox(height: 20),
@@ -76,7 +132,7 @@ class HomeCaregiverPage extends StatelessWidget {
                         },
                       ),
 
-                      // 👉 Guías Rápidas (navega a QuickGuidesPage)
+                      // Guías Rápidas
                       _PillButton(
                         color: kPurple,
                         icon: Icons.menu_book_outlined,
@@ -167,4 +223,3 @@ class _PillButton extends StatelessWidget {
     );
   }
 }
-

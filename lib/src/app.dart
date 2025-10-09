@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'; // 👈 AÑADIR
+
 import 'ui/theme.dart';
 
 // 👇 AuthGate
 import 'ui/auth_gate.dart';
 
 // pantallas iniciales
-// import 'ui/screens/splash_welcome.dart'; // <- ya no se registra en routes
 import 'ui/screens/choice_start.dart';
 import 'ui/screens/login_page.dart';
 
@@ -20,7 +21,7 @@ import 'ui/screens/home_consultant.dart';
 
 // ajustes
 import 'ui/screens/settings_page.dart';
-import 'ui/screens/edit_profile_page.dart'; // ✅ IMPORTA LA VISTA DE EDICIÓN
+import 'ui/screens/edit_profile_page.dart'; // ✅ vista de edición
 
 class WhoAmIApp extends StatelessWidget {
   const WhoAmIApp({super.key});
@@ -32,11 +33,22 @@ class WhoAmIApp extends StatelessWidget {
       title: 'Who Am I?',
       theme: appTheme,
 
+      // 🌐 Localización (necesaria para DatePicker, etc.)
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es'), // Español
+        Locale('en'), // Inglés (opcional)
+      ],
+      locale: const Locale('es'), // Fuerza español (opcional)
+
       // Arranca con AuthGate
       home: const AuthGate(),
 
       routes: {
-        // ❌ Quitar SplashWelcome.route para evitar conflicto con "/"
         ChoiceStart.route:   (_) => const ChoiceStart(),
         LoginPage.route:     (_) => const LoginPage(),
 
@@ -53,8 +65,8 @@ class WhoAmIApp extends StatelessWidget {
           return HomeConsultantPage(displayName: args?['name'] as String?);
         },
 
-        SettingsPage.route:     (_) => const SettingsPage(),
-        EditProfilePage.route:  (_) => const EditProfilePage(), // ✅ RUTA REGISTRADA
+        SettingsPage.route:    (_) => const SettingsPage(),
+        EditProfilePage.route: (_) => const EditProfilePage(), // ✅ ruta registrada
       },
     );
   }
