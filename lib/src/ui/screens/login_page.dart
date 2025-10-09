@@ -1,5 +1,6 @@
 // lib/src/ui/screens/login_page.dart
-import 'dart:async'; // 👈 Timer para cuenta regresiva y pulso
+import 'dart:async'; // Timer para cuenta regresiva y pulso
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -47,6 +48,11 @@ class _LoginPageState extends State<LoginPage> {
   static const int _pulseThreshold = 10;
   Timer? _pulseTimer;
   bool _pulseUp = false;
+
+  // 🚨 Estado de error en contraseña + shake
+  final GlobalKey<_ShakeWidgetState> _passShakeKey = GlobalKey<_ShakeWidgetState>();
+  bool _passwordError = false;
+  String? _passwordErrorText;
 
   @override
   void initState() {
@@ -155,6 +161,46 @@ class _LoginPageState extends State<LoginPage> {
     if (s.isEmpty) return 'Requerido';
     final ok = RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(s);
     return ok ? null : 'Ingresa un correo válido';
+  }
+
+  // ===== Helpers de error unificado =====
+  void _showErrorSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          msg,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  // Normaliza códigos de Firebase Auth para no revelar si falló el correo o la contraseña
+  String _authErrorMessage(FirebaseAuthException e) {
+    final code = (e.code).toLowerCase();
+
+    const unified = {
+      'wrong-password',
+      'user-not-found',
+      'invalid-credential',            // SDK nuevo
+      'invalid-login-credentials',     // variante frecuente
+    };
+
+    if (unified.contains(code)) {
+      return 'Correo o contraseña incorrecta.';
+    }
+
+    switch (code) {
+      case 'invalid-email':
+        return 'Correo inválido.';
+      case 'too-many-requests':
+        return 'Demasiados intentos. Espera un momento y vuelve a intentar.';
+      case 'user-disabled':
+        return 'La cuenta ha sido deshabilitada.';
+      default:
+        return 'No se pudo iniciar sesión. ($code)';
+    }
   }
 
   // =========================
@@ -287,7 +333,12 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      // reset de estado visual de error antes de intentar
+      _passwordError = false;
+      _passwordErrorText = null;
+    });
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -414,23 +465,16 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      String msg = 'No se pudo iniciar sesión.';
-      if (e.code == 'invalid-email') msg = 'Correo inválido.';
-      else if (e.code == 'user-not-found') msg = 'Usuario no encontrado.';
-      else if (e.code == 'wrong-password') msg = 'Contraseña incorrecta.';
-      else if (e.code == 'too-many-requests') {
-        msg = 'Demasiados intentos. Espera un momento y vuelve a intentar. '
-              'Si aún no verificas tu cuenta, revisa tu correo y confirma.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            msg,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // 👇 Mensaje unificado + feedback visual en el campo
+      final msg = _authErrorMessage(e);
+      _showErrorSnack(msg);
+      setState(() {
+        _passwordError = true;
+        _passwordErrorText = (msg == 'Correo o contraseña incorrecta.') ? msg : _passwordErrorText;
+      });
+      _pass.clear();
+      // Sacudir el campo
+      _passShakeKey.currentState?.shake();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -545,11 +589,25 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 14),
                         const _FieldLabel('Contraseña'),
                         const SizedBox(height: 6),
-                        _FieldBox(
-                          controller: _pass,
-                          obscure: true,
-                          textInputAction: TextInputAction.done,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
+
+                        // 🔥 Campo de contraseña con sacudida y error en rojo
+                        ShakeWidget(
+                          key: _passShakeKey,
+                          child: _FieldBox(
+                            controller: _pass,
+                            obscure: true,
+                            textInputAction: TextInputAction.done,
+                            validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
+                            errorText: _passwordError ? (_passwordErrorText ?? 'Correo o contraseña incorrecta.') : null,
+                            onChanged: (_) {
+                              if (_passwordError) {
+                                setState(() {
+                                  _passwordError = false;
+                                  _passwordErrorText = null;
+                                });
+                              }
+                            },
+                          ),
                         ),
 
                         const SizedBox(height: 8),
@@ -622,6 +680,8 @@ class _FieldBox extends StatelessWidget {
     this.textInputAction = TextInputAction.next,
     this.validator,
     this.keyboardType,
+    this.errorText,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -629,6 +689,12 @@ class _FieldBox extends StatelessWidget {
   final TextInputAction textInputAction;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
+
+  // 🔴 soporte de error visual en el propio campo
+  final String? errorText;
+
+  // 🧹 para limpiar el error mientras escribe
+  final void Function(String)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -640,8 +706,71 @@ class _FieldBox extends StatelessWidget {
       autocorrect: false,
       enableSuggestions: !obscure,
       validator: validator,
-      decoration: const InputDecoration(hintText: ''),
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: '',
+        errorText: errorText,        // muestra texto y colorea en rojo
+        errorMaxLines: 2,
+        // Si quieres forzar bordes visibles:
+        // border: const OutlineInputBorder(),
+        // enabledBorder: const OutlineInputBorder(),
+        // focusedBorder: const OutlineInputBorder(),
+      ),
       style: const TextStyle(fontSize: 16, color: kInk),
+    );
+  }
+}
+
+/// ============ ShakeWidget ============
+/// Envuelve un child y expone `shake()` para animar sacudida horizontal.
+class ShakeWidget extends StatefulWidget {
+  const ShakeWidget({super.key, required this.child, this.magnitude = 10, this.duration = const Duration(milliseconds: 420)});
+  final Widget child;
+  final double magnitude;
+  final Duration duration;
+
+  @override
+  State<ShakeWidget> createState() => _ShakeWidgetState();
+}
+
+class _ShakeWidgetState extends State<ShakeWidget> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _anim; // 0..1
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _anim = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+  }
+
+  Future<void> shake() async {
+    if (!mounted) return;
+    await _controller.forward(from: 0);
+    if (!mounted) return;
+    _controller.reset();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // Genera sacudida tipo seno con leve amortiguación
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, child) {
+        // 3 oscilaciones amortiguadas
+        final t = _anim.value;
+        final waves = 3;
+        final decay = (1.0 - t); // amortigua hacia 0
+        final dx = math.sin(t * waves * 2 * math.pi) * widget.magnitude * decay;
+        return Transform.translate(offset: Offset(dx, 0), child: child);
+      },
+      child: widget.child,
     );
   }
 }

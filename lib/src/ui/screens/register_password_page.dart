@@ -14,10 +14,16 @@ class RegisterPasswordPage extends StatefulWidget {
 
 class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
   final _email = TextEditingController();
-  final _pass  = TextEditingController();
+  final _pass = TextEditingController();
   final _pass2 = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  // ======= Estado del indicador de seguridad =======
+  int _passScore = 0;             // 0..5
+  String _passLabel = 'Vacía';    // etiqueta visible
+  Color _passColor = Colors.grey; // color de la barra/etiqueta
+
+  // ---------- Reglas ----------
   String? _emailRule(String? v) {
     final s = v?.trim() ?? '';
     if (s.isEmpty) return 'Requerido';
@@ -25,8 +31,64 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     return ok ? null : 'Ingresa un correo válido';
   }
 
-  String? _passRule(String? v) =>
-      (v == null || v.trim().length < 8) ? 'Mínimo 8 caracteres' : null;
+  String? _passRule(String? v) {
+    final s = v ?? '';
+    if (s.isEmpty) return 'Requerido';
+    if (s.length < 8) return 'Debe tener mínimo 8 caracteres';
+    if (!RegExp(r'[A-Z]').hasMatch(s)) return 'Debe incluir al menos una mayúscula';
+    if (!RegExp(r'[a-z]').hasMatch(s)) return 'Debe incluir al menos una letra minúscula';
+    if (!RegExp(r'[0-9]').hasMatch(s)) return 'Debe incluir al menos un número';
+    if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(s)) {
+      return 'Debe incluir al menos un símbolo o carácter especial';
+    }
+    return null;
+  }
+
+  // ---------- Cálculo de seguridad ----------
+  void _updatePasswordStrength(String s) {
+    final score = _passwordScore(s);
+    setState(() {
+      _passScore = score;
+      _passLabel = _passwordLabel(score);
+      _passColor = _passwordColor(score);
+    });
+  }
+
+  int _passwordScore(String s) {
+    if (s.isEmpty) return 0;
+    int score = 0;
+    if (RegExp(r'[A-Z]').hasMatch(s)) score++;          // mayúscula
+    if (RegExp(r'[a-z]').hasMatch(s)) score++;          // minúscula
+    if (RegExp(r'[0-9]').hasMatch(s)) score++;          // número
+    if (RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(s)) score++; // símbolo
+    if (s.length >= 12) score++;                        // bonus por longitud
+    // score final 0..5
+    return score;
+  }
+
+  String _passwordLabel(int score) {
+    switch (score) {
+      case 0: return 'Vacía';
+      case 1: return 'Débil';
+      case 2: return 'Media';
+      case 3: return 'Fuerte';
+      case 4: return 'Muy fuerte';
+      case 5: return 'Excelente';
+      default: return 'Vacía';
+    }
+  }
+
+  Color _passwordColor(int score) {
+    switch (score) {
+      case 0: return Colors.grey;
+      case 1: return Colors.red;
+      case 2: return Colors.orange;
+      case 3: return Colors.amber;
+      case 4: return Colors.lightGreen;
+      case 5: return Colors.green;
+      default: return Colors.grey;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +115,8 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                           child: Stack(
                             children: [
                               Positioned(
-                                left: 0, top: 8,
+                                left: 0,
+                                top: 8,
                                 child: IconButton.filled(
                                   style: IconButton.styleFrom(
                                     backgroundColor: const Color(0xFFEAEAEA),
@@ -98,11 +161,20 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                           obscure: true,
                           textInputAction: TextInputAction.next,
                           validator: _passRule,
+                          onChanged: _updatePasswordStrength, // 👈 actualiza indicador en vivo
                         ),
 
-                        const SizedBox(height: 6),
+                        // Indicador de seguridad
+                        const SizedBox(height: 10),
+                        _PasswordStrengthBar(
+                          score: _passScore,
+                          color: _passColor,
+                          label: _passLabel,
+                        ),
+
+                        const SizedBox(height: 10),
                         const Text(
-                          'Debe tener mínimo 8 caracteres, incluir letras y números.',
+                          'Debe tener al menos 8 caracteres, incluir letras, una mayúscula, números y un símbolo.',
                           style: TextStyle(fontSize: 12, color: kGrey1),
                           textAlign: TextAlign.left,
                         ),
@@ -120,7 +192,8 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                         const SizedBox(height: 28),
                         Align(
                           child: SizedBox(
-                            width: 296, height: 56,
+                            width: 296,
+                            height: 56,
                             child: FilledButton(
                               style: pillBlue(),
                               onPressed: () {
@@ -129,9 +202,9 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                                   context,
                                   RegisterRolePage.route,
                                   arguments: {
-                                    ...prev,                               // nombre, apellidos, birthday (paso previo)
-                                    'email': _email.text.trim().toLowerCase(), // correo normalizado
-                                    'password': _pass.text,               // contraseña
+                                    ...prev,
+                                    'email': _email.text.trim().toLowerCase(),
+                                    'password': _pass.text,
                                   },
                                 );
                               },
@@ -157,8 +230,10 @@ class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.text);
   final String text;
   @override
-  Widget build(BuildContext context) =>
-      Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kInk));
+  Widget build(BuildContext context) => Text(
+        text,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kInk),
+      );
 }
 
 class _FieldBox extends StatelessWidget {
@@ -168,6 +243,7 @@ class _FieldBox extends StatelessWidget {
     this.textInputAction = TextInputAction.next,
     this.validator,
     this.keyboardType,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -175,6 +251,7 @@ class _FieldBox extends StatelessWidget {
   final TextInputAction textInputAction;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
+  final void Function(String)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -186,8 +263,51 @@ class _FieldBox extends StatelessWidget {
       autocorrect: false,
       enableSuggestions: !obscure,
       validator: validator,
+      onChanged: onChanged,
       decoration: const InputDecoration(hintText: ''),
       style: const TextStyle(fontSize: 16, color: kInk),
+    );
+  }
+}
+
+// ====== Barra de fuerza de contraseña ======
+class _PasswordStrengthBar extends StatelessWidget {
+  const _PasswordStrengthBar({
+    required this.score,
+    required this.color,
+    required this.label,
+  });
+
+  final int score;   // 0..5
+  final Color color; // dinámico
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (score.clamp(0, 5)) / 5.0;
+    return Row(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: value == 0 ? 0.02 : value, // una rayita visible si está vacío
+              minHeight: 10,
+              backgroundColor: const Color(0xFFEAEAEA),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }

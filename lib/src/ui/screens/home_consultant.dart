@@ -5,6 +5,8 @@ import 'settings_page.dart';
 
 // 👇 Importa la vista de Consejos
 import 'tips_page.dart';
+// 👇 Importa la futura vista de Juegos (créala después)
+import 'games_page.dart';
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -36,14 +38,15 @@ class HomeConsultantPage extends StatelessWidget {
                         alignment: Alignment.centerLeft,
                         child: IconButton(
                           onPressed: () {
-                            // 👇 Navegar a Ajustes
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => const SettingsPage()),
+                                builder: (_) => const SettingsPage(),
+                              ),
                             );
                           },
-                          icon: const Icon(Icons.settings, color: kInk, size: 28),
+                          icon:
+                              const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
                       const BrandLogo(size: 120),
@@ -70,7 +73,6 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.menu_book_outlined,
                         text: 'Consejos',
                         onTap: () {
-                          // 👇 Navega a la vista de Consejos
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -101,6 +103,22 @@ class HomeConsultantPage extends StatelessWidget {
                         text: 'ChatWhoAmI',
                         onTap: () {
                           // TODO: Conectar a la vista de Chat
+                        },
+                      ),
+
+                      // 👇 Nuevo botón de JUEGOS
+                      _PillButton(
+                        color: kBlue,
+                        icon: Icons.videogame_asset_outlined,
+                        text: 'Juegos',
+                        onTap: () {
+                          // 👇 Navega a la vista de Juegos
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const GamesPage(),
+                            ),
+                          );
                         },
                       ),
 

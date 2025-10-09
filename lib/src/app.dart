@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'ui/theme.dart';
 
+// 👇 importa el AuthGate
+import 'ui/auth_gate.dart';
+
 // pantallas iniciales
-import 'ui/screens/splash_welcome.dart';
+// import 'ui/screens/splash_welcome.dart'; // <- ya no se registra en routes
 import 'ui/screens/choice_start.dart';
 import 'ui/screens/login_page.dart';
 
@@ -27,19 +30,19 @@ class WhoAmIApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Who Am I',
       theme: appTheme,
-      initialRoute: SplashWelcome.route,
+
+      // Arranca con AuthGate
+      home: const AuthGate(),
+
       routes: {
-        // inicio y auth
-        SplashWelcome.route: (_) => const SplashWelcome(),
+        // ❌ Quitar SplashWelcome.route para evitar conflicto con "/"
         ChoiceStart.route:   (_) => const ChoiceStart(),
         LoginPage.route:     (_) => const LoginPage(),
 
-        // registro
         RegisterNamePage.route:     (_) => const RegisterNamePage(),
         RegisterPasswordPage.route: (_) => const RegisterPasswordPage(),
         RegisterRolePage.route:     (_) => const RegisterRolePage(),
 
-        // menús por rol
         HomeCaregiverPage.route: (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments as Map?;
           return HomeCaregiverPage(displayName: args?['name'] as String?);
@@ -49,7 +52,6 @@ class WhoAmIApp extends StatelessWidget {
           return HomeConsultantPage(displayName: args?['name'] as String?);
         },
 
-        // ajustes
         SettingsPage.route: (_) => const SettingsPage(),
       },
     );

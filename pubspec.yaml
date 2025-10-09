@@ -41,8 +41,15 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1   # 👈 agregado
 
 flutter:
   uses-material-design: true
   assets:
     - assets/          # incluye logo.png, bot.gif, etc. dentro de /assets
+
+# --- Configuración para icono ---
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"   # 👈 tu icono aquí (ej. 512x512 PNG)
