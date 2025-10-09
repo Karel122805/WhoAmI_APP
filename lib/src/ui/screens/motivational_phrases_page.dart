@@ -2,81 +2,76 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
-class QuickGuidesPage extends StatefulWidget {
-  const QuickGuidesPage({super.key});
-  static const route = '/quick-guides';
+class MotivationalPhrasesPage extends StatefulWidget {
+  const MotivationalPhrasesPage({super.key});
+  static const route = '/motivational-phrases';
 
   @override
-  State<QuickGuidesPage> createState() => _QuickGuidesPageState();
+  State<MotivationalPhrasesPage> createState() => _MotivationalPhrasesPageState();
 }
 
-class _QuickGuidesPageState extends State<QuickGuidesPage> {
-  // Colores de la app
+class _MotivationalPhrasesPageState extends State<MotivationalPhrasesPage> {
+  // Colores base
   static const Color blue = Color(0xFF9ED3FF);
   static const Color text = Color(0xFF111111);
 
   final _tts = FlutterTts();
   final _rnd = Random();
 
-  // --- Guías para cuidadores de Alzheimer ---
-  final Map<String, List<String>> _guidesByCategory = {
-    "Emergencias y señales de alerta": [
-      "Si tu paciente se altera, ponle música que le guste para calmarlo.",
-      "Si se desorienta en la calle, mantenlo acompañado y muéstrale objetos familiares.",
-      "En caso de caída, revisa si puede moverse; si hay dolor fuerte, no lo levantes y busca ayuda médica.",
-      "Ten siempre a la mano un kit con medicamentos, identificación y números de emergencia.",
-      "Si notas fiebre, dificultad para respirar o cambios bruscos de conducta, contacta al médico de inmediato.",
+  // ================== 40 FRASES (agrupadas) ==================
+  final Map<String, List<String>> _phrasesByCategory = {
+    "Ánimo diario": [
+      "Hoy es un buen día para intentarlo con calma.",
+      "Paso a pasito, lo estoy haciendo bien.",
+      "Puedo aprender algo pequeño hoy.",
+      "Mi esfuerzo de hoy cuenta y vale.",
+      "Respiro hondo y sigo adelante.",
+      "Soy más fuerte de lo que pienso.",
+      "Cada momento es una nueva oportunidad.",
+      "Hago lo mejor que puedo y eso está bien.",
     ],
-    "Rutina diaria": [
-      "Mantén horarios fijos para dormir, comer y bañarse; eso le da seguridad.",
-      "Coloca siempre la ropa en el mismo lugar para que pueda identificarla.",
-      "Divide actividades en pasos simples: ‘primero lávate las manos, luego siéntate’.",
-      "Permite que participe en tareas fáciles como doblar ropa o regar plantas.",
-      "Anticipa lo que van a hacer: avísale con calma lo que viene después.",
+    "Calma y respiración": [
+      "Respiro lento tres veces y siento paz.",
+      "Puedo pausar un momento y descansar.",
+      "Mi cuerpo se relaja cuando respiro suave.",
+      "Puedo tomarme mi tiempo, no hay prisa.",
+      "Si me confundo, respiro y vuelvo a empezar.",
+      "La calma llega cuando escucho mi respiración.",
+      "Estoy a salvo aquí y ahora.",
+      "Puedo soltar la tensión de mis hombros y seguir.",
     ],
-    "Comunicación": [
-      "Háblale con frases cortas y claras, usando un tono calmado.",
-      "Evita discutir o corregir; en su lugar, cambia de tema suavemente.",
-      "Mantén contacto visual y usa gestos o señas cuando hables.",
-      "Haz preguntas simples de sí o no para que le sea más fácil responder.",
-      "Si no entiende una palabra, muéstrale un objeto o una imagen como apoyo.",
+    "Memoria e identidad": [
+      "Mi nombre es importante y vale mucho.",
+      "Hay recuerdos bonitos guardados en mi corazón.",
+      "Puedo pedir ayuda cuando la necesito.",
+      "Lo que soy no se pierde: sigo siendo yo.",
+      "Cada día puedo recordar algo sencillo.",
+      "Soy valioso para mi familia y para mí.",
+      "Puedo mirar una foto y sonreír.",
+      "Mi historia sigue, paso a paso.",
     ],
-    "Seguridad en el hogar": [
-      "Coloca candados o seguros en puertas que no debe abrir, como cocina o despensa.",
-      "Ilumina bien pasillos y escaleras; la poca luz aumenta la desorientación.",
-      "Retira objetos pequeños o alfombras que puedan provocar caídas.",
-      "Pon etiquetas con dibujos en puertas y cajones: baño, cocina, ropa.",
-      "Guarda objetos peligrosos como cuchillos, cerillos o productos de limpieza.",
+    "Autonomía y pequeños logros": [
+      "Hoy puedo lograr una tarea sencilla.",
+      "Si no sale a la primera, lo intento de nuevo.",
+      "Puedo seguir instrucciones cortas y claras.",
+      "Un pequeño logro es un gran avance.",
+      "Puedo organizar mis cosas con ayuda.",
+      "Mi ritmo es perfecto para mí.",
+      "Celebro lo que sí pude hacer hoy.",
+      "Puedo pedir indicaciones y seguirlas.",
     ],
-    "Medicamentos": [
-      "Organiza las pastillas en un pastillero semanal y usa alarmas para recordatorios.",
-      "Explícale cada medicina con calma, mostrando el envase o pastillero.",
-      "Apunta en una libreta los horarios de cada medicamento y verifica al final del día.",
-      "Nunca cambies la dosis sin consultar al médico.",
-      "Si notas somnolencia, mareos o malestar después de una medicina, notifícalo al doctor.",
-    ],
-    "Alimentación e hidratación": [
-      "Ofrécele agua constantemente, incluso si dice que no tiene sed.",
-      "Usa platos de colores para que identifique mejor la comida.",
-      "Evita el ruido o la televisión durante las comidas para que se concentre.",
-      "Corta los alimentos en trozos pequeños y fáciles de masticar.",
-      "Si rechaza un plato, ofrece otro alimento que le guste en porciones pequeñas.",
-    ],
-    "Estimulación cognitiva y física": [
-      "Muestra fotos familiares y repitan los nombres en voz alta juntos.",
-      "Realiza caminatas cortas en lugares seguros, de 10 a 15 minutos diarios.",
-      "Pon canciones conocidas y cántenlas juntos para estimular recuerdos.",
-      "Jueguen memoramas, rompecabezas grandes o clasificar objetos por color.",
-      "Practiquen respiraciones profundas por 2 minutos para relajarse.",
-    ],
-    "Autocuidado del cuidador": [
-      "Si te sientes agotado, pide ayuda a un familiar o amigo antes de sobrecargarte.",
-      "Tómate 10 minutos al día para ti: respira, escucha música o haz algo que disfrutes.",
-      "No descuides tus horas de sueño; tu descanso es clave para cuidar mejor.",
-      "Habla con otros cuidadores o busca un grupo de apoyo; compartir experiencias ayuda.",
-      "Pedir ayuda no es debilidad: es parte del cuidado responsable.",
+    "Afecto y compañía": [
+      "No estoy solo: hay gente que me quiere.",
+      "Puedo pedir un abrazo cuando lo necesite.",
+      "Mi voz es escuchada con cariño.",
+      "Caminar acompañado me hace bien.",
+      "Gracias por cuidar de mí; yo también cuido de mí.",
+      "Puedo sonreír y agradecer las cosas simples.",
+      "Juntos es más fácil y más bonito.",
+      "La ternura también es una fuerza.",
     ],
   };
+  // ================== FIN FRASES ==================
 
   late final List<String> _categories;
   String _selected = "Aleatorias";
@@ -85,7 +80,7 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
   @override
   void initState() {
     super.initState();
-    _categories = ["Aleatorias", ..._guidesByCategory.keys];
+    _categories = ["Aleatorias", ..._phrasesByCategory.keys];
     _configureTts();
     _pickVisible();
   }
@@ -93,13 +88,15 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
   Future<void> _configureTts() async {
     await _tts.setLanguage("es-MX");
     await _tts.setPitch(1.0);
-    await _tts.setSpeechRate(0.5); // más lento para claridad
+    await _tts.setSpeechRate(0.5); // ritmo claro
   }
 
-  List<String> _poolFor(String c) =>
-      c == "Aleatorias"
-          ? _guidesByCategory.values.expand((e) => e).toList()
-          : (_guidesByCategory[c] ?? const []);
+  List<String> _poolFor(String category) {
+    if (category == "Aleatorias") {
+      return _phrasesByCategory.values.expand((x) => x).toList();
+    }
+    return _phrasesByCategory[category] ?? const [];
+  }
 
   void _pickVisible() {
     final pool = _poolFor(_selected);
@@ -124,12 +121,10 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Guías rápidas"),
-        centerTitle: true,
-        elevation: 0,
-      ),
+      appBar:
+          AppBar(title: const Text("Frases motivadoras"), centerTitle: true, elevation: 0),
       body: Padding(
+        // un poco más de padding inferior para “subir” el botón
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 58), // 👈 ajustado
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,9 +163,9 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
                                     ),
                                   ))
                               .toList(),
-                          onChanged: (v) {
-                            if (v == null) return;
-                            setState(() => _selected = v);
+                          onChanged: (val) {
+                            if (val == null) return;
+                            setState(() => _selected = val);
                             _pickVisible();
                           },
                         ),
@@ -182,35 +177,35 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
             ),
             const SizedBox(height: 12),
 
-            // Lista de guías
+            // Lista de frases
             Expanded(
               child: ListView.builder(
                 itemCount: _visible.length,
                 itemBuilder: (_, i) {
-                  final guide = _visible[i];
-                  return _GuideCard(
-                    text: guide,
-                    onTap: () => _speak(guide),
+                  final phrase = _visible[i];
+                  return _PhraseCard(
+                    text: phrase,
+                    onTap: () => _speak(phrase),
                   );
                 },
               ),
             ),
 
-            // Botón que resetea a Aleatorias siempre
+            // Botón: cambia automáticamente a “Aleatorias”
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
                   setState(() {
-                    _selected = "Aleatorias"; // 👈 forzar a aleatorias
+                    _selected = "Aleatorias"; // 👈 forzar categoría
                   });
                   _pickVisible();
                 },
                 icon: const Icon(Icons.refresh),
                 label: Text(
                   _selected == "Aleatorias"
-                      ? "Mostrar otras guías"
-                      : "Ver guías aleatorias",
+                      ? "Mostrar otras frases"
+                      : "Ver frases aleatorias",
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: blue,
@@ -222,7 +217,6 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
           ],
         ),
       ),
@@ -230,10 +224,10 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
   }
 }
 
-class _GuideCard extends StatelessWidget {
+class _PhraseCard extends StatelessWidget {
   final String text;
   final VoidCallback onTap;
-  const _GuideCard({required this.text, required this.onTap});
+  const _PhraseCard({required this.text, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +254,7 @@ class _GuideCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.health_and_safety, size: 22),
+            const Icon(Icons.format_quote, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Text(

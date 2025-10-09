@@ -28,7 +28,7 @@ class WhoAmIApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Who Am I',
+      title: 'Who Am I?',
       theme: appTheme,
 
       // Arranca con AuthGate

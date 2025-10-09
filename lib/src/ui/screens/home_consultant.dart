@@ -3,10 +3,10 @@ import '../brand_logo.dart';
 import '../theme.dart';
 import 'settings_page.dart';
 
-// 👇 Importa la vista de Consejos
+// 👇 Vistas
 import 'tips_page.dart';
-// 👇 Importa la futura vista de Juegos (créala después)
 import 'games_page.dart';
+import 'motivational_phrases_page.dart'; // <-- NUEVO
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -21,8 +21,9 @@ class HomeConsultantPage extends StatelessWidget {
         : 'Usuario';
 
     return MediaQuery(
-      data: MediaQuery.of(context)
-          .copyWith(textScaler: const TextScaler.linear(1)),
+      data: MediaQuery.of(context).copyWith(
+        textScaler: const TextScaler.linear(1),
+      ),
       child: Scaffold(
         body: SafeArea(
           child: Center(
@@ -45,8 +46,7 @@ class HomeConsultantPage extends StatelessWidget {
                               ),
                             );
                           },
-                          icon:
-                              const Icon(Icons.settings, color: kInk, size: 28),
+                          icon: const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
                       const BrandLogo(size: 120),
@@ -86,7 +86,12 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.auto_stories_outlined,
                         text: 'Frases motivadoras',
                         onTap: () {
-                          // TODO: Conectar a la vista de Frases motivadoras
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MotivationalPhrasesPage(),
+                            ),
+                          );
                         },
                       ),
                       _PillButton(
@@ -106,13 +111,12 @@ class HomeConsultantPage extends StatelessWidget {
                         },
                       ),
 
-                      // 👇 Nuevo botón de JUEGOS
+                      // 👇 Botón de JUEGOS
                       _PillButton(
                         color: kBlue,
                         icon: Icons.videogame_asset_outlined,
                         text: 'Juegos',
                         onTap: () {
-                          // 👇 Navega a la vista de Juegos
                           Navigator.push(
                             context,
                             MaterialPageRoute(

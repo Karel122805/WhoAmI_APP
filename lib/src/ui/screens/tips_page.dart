@@ -92,7 +92,6 @@ class _TipsPageState extends State<TipsPage> {
     ],
   };
 
-  // Categorías dinámicas
   late final List<String> _categories;
   String _selected = "Aleatorias";
   List<String> _visible = [];
@@ -141,9 +140,10 @@ class _TipsPageState extends State<TipsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(title: const Text("Consejos"), centerTitle: true, elevation: 0),
+      appBar:
+          AppBar(title: const Text("Consejos"), centerTitle: true, elevation: 0),
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 58), // 👈 ajustado
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -151,8 +151,10 @@ class _TipsPageState extends State<TipsPage> {
             Row(
               children: [
                 const Expanded(
-                  child: Text("Selecciona una categoría",
-                      style: TextStyle(color: Colors.black54)),
+                  child: Text(
+                    "Selecciona una categoría",
+                    style: TextStyle(color: Colors.black54),
+                  ),
                 ),
                 SizedBox(
                   height: 38,
@@ -192,7 +194,6 @@ class _TipsPageState extends State<TipsPage> {
               ],
             ),
             const SizedBox(height: 12),
-
             Expanded(
               child: ListView.builder(
                 itemCount: _visible.length,
@@ -205,7 +206,6 @@ class _TipsPageState extends State<TipsPage> {
                 },
               ),
             ),
-
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -231,7 +231,6 @@ class _TipsPageState extends State<TipsPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
           ],
         ),
       ),
