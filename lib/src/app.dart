@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'ui/theme.dart';
 
-// 👇 importa el AuthGate
+// 👇 AuthGate
 import 'ui/auth_gate.dart';
 
 // pantallas iniciales
@@ -20,6 +20,7 @@ import 'ui/screens/home_consultant.dart';
 
 // ajustes
 import 'ui/screens/settings_page.dart';
+import 'ui/screens/edit_profile_page.dart'; // ✅ IMPORTA LA VISTA DE EDICIÓN
 
 class WhoAmIApp extends StatelessWidget {
   const WhoAmIApp({super.key});
@@ -52,7 +53,8 @@ class WhoAmIApp extends StatelessWidget {
           return HomeConsultantPage(displayName: args?['name'] as String?);
         },
 
-        SettingsPage.route: (_) => const SettingsPage(),
+        SettingsPage.route:     (_) => const SettingsPage(),
+        EditProfilePage.route:  (_) => const EditProfilePage(), // ✅ RUTA REGISTRADA
       },
     );
   }

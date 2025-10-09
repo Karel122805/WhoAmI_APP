@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <base href="./">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+  <style>
+    body { margin:0; padding:0; background:#000; overflow:hidden; }
+    #canvasArea { margin-left:auto; margin-right:auto; overflow:hidden; }
+  </style>
+
+  <!-- Libs y core GDJS (SIN crossorigin) -->
+  <script src="libs/jshashtable.js"></script>
+  <script src="logger.js"></script>
+  <script src="gd.js"></script>
+  <script src="libs/rbush.js"></script>
+  <script src="AsyncTasksManager.js"></script>
+  <script src="inputmanager.js"></script>
+  <script src="jsonmanager.js"></script>
+  <script src="Model3DManager.js"></script>
+  <script src="ResourceLoader.js"></script>
+  <script src="ResourceCache.js"></script>
+  <script src="timemanager.js"></script>
+  <script src="polygon.js"></script>
+  <script src="runtimeobject.js"></script>
+  <script src="profiler.js"></script>
+  <script src="RuntimeInstanceContainer.js"></script>
+  <script src="runtimescene.js"></script>
+  <script src="scenestack.js"></script>
+  <script src="force.js"></script>
+  <script src="RuntimeLayer.js"></script>
+  <script src="layer.js"></script>
+  <script src="RuntimeCustomObjectLayer.js"></script>
+  <script src="timer.js"></script>
+  <script src="runtimewatermark.js"></script>
+
+  <!-- 👇 IMPORTANTE: primero variables, luego runtimegame -->
+  <script src="variable.js"></script>
+  <script src="variablescontainer.js"></script>
+  <script src="oncetriggers.js"></script>
+  <script src="runtimebehavior.js"></script>
+  <script src="SpriteAnimator.js"></script>
+  <script src="spriteruntimeobject.js"></script>
+  <script src="affinetransformation.js"></script>
+  <script src="CustomRuntimeObjectInstanceContainer.js"></script>
+  <script src="CustomRuntimeObject.js"></script>
+  <script src="CustomRuntimeObject2D.js"></script>
+  <script src="runtimegame.js"></script>
+  <!-- ☝️ mover runtimegame.js AQUÍ resuelve el error de VariablesContainer -->
+
+  <!-- Events/tools -->
+  <script src="events-tools/commontools.js"></script>
+  <script src="events-tools/variabletools.js"></script>
+  <script src="events-tools/runtimescenetools.js"></script>
+  <script src="events-tools/inputtools.js"></script>
+  <script src="events-tools/objecttools.js"></script>
+  <script src="events-tools/cameratools.js"></script>
+  <script src="events-tools/soundtools.js"></script>
+  <script src="events-tools/storagetools.js"></script>
+  <script src="events-tools/stringtools.js"></script>
+  <script src="events-tools/windowtools.js"></script>
+  <script src="events-tools/networktools.js"></script>
+
+  <!-- Render/audio/fonts -->
+  <script src="splash/gd-logo-light.js"></script>
+  <script src="pixi-renderers/pixi.js"></script>
+  <script src="pixi-renderers/pixi-filters-tools.js"></script>
+  <script src="pixi-renderers/runtimegame-pixi-renderer.js"></script>
+  <script src="pixi-renderers/runtimescene-pixi-renderer.js"></script>
+  <script src="pixi-renderers/layer-pixi-renderer.js"></script>
+  <script src="pixi-renderers/pixi-image-manager.js"></script>
+  <script src="pixi-renderers/pixi-bitmapfont-manager.js"></script>
+  <script src="pixi-renderers/spriteruntimeobject-pixi-renderer.js"></script>
+  <script src="pixi-renderers/CustomRuntimeObject2DPixiRenderer.js"></script>
+  <script src="pixi-renderers/DebuggerPixiRenderer.js"></script>
+  <script src="pixi-renderers/loadingscreen-pixi-renderer.js"></script>
+  <script src="pixi-renderers/pixi-effects-manager.js"></script>
+  <script src="howler-sound-manager/howler.min.js"></script>
+  <script src="howler-sound-manager/howler-sound-manager.js"></script>
+  <script src="fontfaceobserver-font-manager/fontfaceobserver.js"></script>
+  <script src="fontfaceobserver-font-manager/fontfaceobserver-font-manager.js"></script>
+
+  <!-- Extensiones sueltas -->
+  <script src="gdjs-evtsext__buttonstates__buttonfsm.js"></script>
+  <script src="gdjs-evtsext__buttonstates__buttonobjecteffecttween.js"></script>
+  <script src="gdjs-evtsext__card__explodecard-func.js"></script>
+  <script src="gdjs-evtsext__objectstack__contains-func.js"></script>
+  <script src="gdjs-evtsext__objectstack__containsat-func.js"></script>
+  <script src="gdjs-evtsext__objectstack__containsbetween-func.js"></script>
+  <script src="gdjs-evtsext__objectstack__definehelperclasses-func.js"></script>
+  <script src="gdjs-evtsext__objectstack__hasontop-func.js"></script>
+  <script src="gdjs-evtsext__objectstack__objectstack.js"></script>
+  <script src="gdjs-evtsext__panelspritebutton__buttonfsm.js"></script>
+  <script src="gdjs-evtsext__panelspritebutton__panelspritebutton.js"></script>
+  <script src="gdjs-evtsext__threedflip__threedflip.js"></script>
+
+  <!-- Extensions (carpetas) -->
+  <script src="Extensions/AnchorBehavior/anchorruntimebehavior.js"></script>
+  <script src="Extensions/PanelSpriteObject/panelspriteruntimeobject-pixi-renderer.js"></script>
+  <script src="Extensions/PanelSpriteObject/panelspriteruntimeobject.js"></script>
+  <script src="Extensions/ParticleSystem/particleemitterobject-pixi-renderer.js"></script>
+  <script src="Extensions/ParticleSystem/particleemitterobject.js"></script>
+  <script src="Extensions/ParticleSystem/pixi-particles-pixi-renderer.min.js"></script>
+  <script src="Extensions/TextObject/textruntimeobject-pixi-renderer.js"></script>
+  <script src="Extensions/TextObject/textruntimeobject.js"></script>
+  <script src="Extensions/TweenBehavior/TweenManager.js"></script>
+  <script src="Extensions/TweenBehavior/tweenruntimebehavior.js"></script>
+
+  <!-- Capacidades -->
+  <script src="object-capabilities/AnimatableBehavior.js"></script>
+  <script src="object-capabilities/EffectBehavior.js"></script>
+  <script src="object-capabilities/FlippableBehavior.js"></script>
+  <script src="object-capabilities/OpacityBehavior.js"></script>
+  <script src="object-capabilities/ResizableBehavior.js"></script>
+  <script src="object-capabilities/ScalableBehavior.js"></script>
+  <script src="object-capabilities/TextContainerBehavior.js"></script>
+
+  <!-- 3D / Efectos -->
+  <script src="Extensions/3D/DirectionalLight.js"></script>
+  <script src="Extensions/3D/HemisphereLight.js"></script>
+  <script src="Extensions/Effects/adjustment-pixi-filter.js"></script>
+  <script src="Extensions/Effects/pixi-filters/filter-adjustment.js"></script>
+
+  <!-- Código del juego (el orden suele ser indiferente) -->
+  <script src="code0.js"></script>
+  <script src="code1.js"></script>
+  <script src="data.js"></script>
+</head>
+<body>
+  <script>
+    (function () {
+      try {
+        var game = new gdjs.RuntimeGame(gdjs.projectData, {});
+        game.getRenderer().createStandardCanvas(document.body);
+        game.getRenderer().bindStandardEvents(game.getInputManager(), window, document);
+        game.loadAllAssets(function () {
+          game.startGameLoop();
+        });
+      } catch (e) {
+        document.body.style.background = '#222';
+        document.body.style.color = '#fff';
+        document.body.innerHTML =
+          '<h2 style="text-align:center;margin-top:40vh;">Error al cargar el juego</h2>' +
+          '<p style="text-align:center;">' + (e && e.message ? e.message : e) + '</p>';
+        console.error(e);
+      }
+    })();
+  </script>
+</body>
+</html>

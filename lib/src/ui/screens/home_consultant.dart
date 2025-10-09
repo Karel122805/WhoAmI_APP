@@ -5,8 +5,8 @@ import 'settings_page.dart';
 
 // 👇 Vistas
 import 'tips_page.dart';
-import 'games_page.dart';
-import 'motivational_phrases_page.dart'; // <-- NUEVO
+import 'game_page.dart'; // <- corregido (antes: games_page.dart)
+import 'motivational_phrases_page.dart'; // Frases motivadoras
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -75,9 +75,7 @@ class HomeConsultantPage extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => const TipsPage(),
-                            ),
+                            MaterialPageRoute(builder: (_) => const TipsPage()),
                           );
                         },
                       ),
@@ -88,9 +86,7 @@ class HomeConsultantPage extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => const MotivationalPhrasesPage(),
-                            ),
+                            MaterialPageRoute(builder: (_) => const MotivationalPhrasesPage()),
                           );
                         },
                       ),
@@ -118,30 +114,20 @@ class HomeConsultantPage extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const GamesPage(),
+                              builder: (_) => const GamePage(), // <- corregido (antes: GamesPage)
                             ),
                           );
                         },
                       ),
 
-                      // 🔴 Botón de EMERGENCIA
-                      const SizedBox(height: 8),
+                      // 🔴 Botón de EMERGENCIA (alineado igual que los demás)
+                      const SizedBox(height: 1),
                       _PillButton(
-                        color: Color(0xFFFF9AA0), // 👈 tono rosado/rojo pastel
+                        color: const Color(0xFFFF9AA0), // tono del ejemplo
                         icon: Icons.warning_amber_rounded,
                         text: 'Emergencia',
-                        onTap: () {
-                          // Aquí puedes poner la acción de emergencia:
-                          // llamar, mostrar contactos o alerta sonora.
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Función de emergencia activada',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
+                        onTap: () async {
+                          _showComingSoonDialog(context);
                         },
                       ),
 
@@ -158,7 +144,7 @@ class HomeConsultantPage extends StatelessWidget {
   }
 }
 
-// ===================== COMPONENTE REUTILIZABLE =====================
+// ===================== COMPONENTES =====================
 class _PillButton extends StatelessWidget {
   const _PillButton({
     required this.color,
@@ -206,4 +192,23 @@ class _PillButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// Diálogo de “próximamente”
+void _showComingSoonDialog(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Emergencia'),
+      content: const Text(
+        'Muy pronto este botón avisará al cuidador con una notificación.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Entendido'),
+        ),
+      ],
+    ),
+  );
 }
