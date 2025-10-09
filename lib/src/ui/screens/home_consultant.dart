@@ -110,8 +110,6 @@ class HomeConsultantPage extends StatelessWidget {
                           // TODO: Conectar a la vista de Chat
                         },
                       ),
-
-                      // 👇 Botón de JUEGOS
                       _PillButton(
                         color: kBlue,
                         icon: Icons.videogame_asset_outlined,
@@ -121,6 +119,27 @@ class HomeConsultantPage extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (_) => const GamesPage(),
+                            ),
+                          );
+                        },
+                      ),
+
+                      // 🔴 Botón de EMERGENCIA
+                      const SizedBox(height: 8),
+                      _PillButton(
+                        color: Color(0xFFFF9AA0), // 👈 tono rosado/rojo pastel
+                        icon: Icons.warning_amber_rounded,
+                        text: 'Emergencia',
+                        onTap: () {
+                          // Aquí puedes poner la acción de emergencia:
+                          // llamar, mostrar contactos o alerta sonora.
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Función de emergencia activada',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              backgroundColor: Colors.redAccent,
                             ),
                           );
                         },
@@ -139,6 +158,7 @@ class HomeConsultantPage extends StatelessWidget {
   }
 }
 
+// ===================== COMPONENTE REUTILIZABLE =====================
 class _PillButton extends StatelessWidget {
   const _PillButton({
     required this.color,
