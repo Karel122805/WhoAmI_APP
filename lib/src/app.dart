@@ -1,27 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart'; // 👈 AÑADIR
-
 import 'ui/theme.dart';
 
-// 👇 AuthGate
-import 'ui/auth_gate.dart';
+// Raíz
+import 'ui/screens/auth_gate.dart';
 
-// pantallas iniciales
+// flujo inicial
 import 'ui/screens/choice_start.dart';
 import 'ui/screens/login_page.dart';
 
-// pantallas de registro
+// registro
 import 'ui/screens/register_name_page.dart';
 import 'ui/screens/register_password_page.dart';
 import 'ui/screens/register_role_page.dart';
 
-// menús por rol
+// homes por rol
 import 'ui/screens/home_caregiver.dart';
 import 'ui/screens/home_consultant.dart';
 
 // ajustes
 import 'ui/screens/settings_page.dart';
-import 'ui/screens/edit_profile_page.dart'; // ✅ vista de edición
+import 'ui/screens/edit_profile_page.dart'; // 👈 NUEVO: para la ruta de editar perfil
 
 class WhoAmIApp extends StatelessWidget {
   const WhoAmIApp({super.key});
@@ -33,40 +31,34 @@ class WhoAmIApp extends StatelessWidget {
       title: 'Who Am I?',
       theme: appTheme,
 
-      // 🌐 Localización (necesaria para DatePicker, etc.)
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('es'), // Español
-        Locale('en'), // Inglés (opcional)
-      ],
-      locale: const Locale('es'), // Fuerza español (opcional)
-
-      // Arranca con AuthGate
-      home: const AuthGate(),
-
+      // Usamos rutas con nombre
+      initialRoute: '/',
       routes: {
-        ChoiceStart.route:   (_) => const ChoiceStart(),
-        LoginPage.route:     (_) => const LoginPage(),
+        // Raíz (controla splash / comencemos / home)
+        '/': (_) => const AuthGate(),
 
-        RegisterNamePage.route:     (_) => const RegisterNamePage(),
-        RegisterPasswordPage.route: (_) => const RegisterPasswordPage(),
-        RegisterRolePage.route:     (_) => const RegisterRolePage(),
+        // Flujo sin sesión
+        '/auth/choice': (_) => const ChoiceStart(),
+        '/login': (_) => const LoginPage(),
 
-        HomeCaregiverPage.route: (ctx) {
+        // Registro
+        '/register/name': (_) => const RegisterNamePage(),
+        '/register/password': (_) => const RegisterPasswordPage(),
+        '/register/role': (_) => const RegisterRolePage(),
+
+        // Homes por rol
+        '/home/caregiver': (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments as Map?;
           return HomeCaregiverPage(displayName: args?['name'] as String?);
         },
-        HomeConsultantPage.route: (ctx) {
+        '/home/consultant': (ctx) {
           final args = ModalRoute.of(ctx)?.settings.arguments as Map?;
           return HomeConsultantPage(displayName: args?['name'] as String?);
         },
 
-        SettingsPage.route:    (_) => const SettingsPage(),
-        EditProfilePage.route: (_) => const EditProfilePage(), // ✅ ruta registrada
+        // Ajustes
+        '/settings': (_) => const SettingsPage(),
+        '/settings/edit-profile': (_) => const EditProfilePage(), // 👈 NUEVA RUTA
       },
     );
   }

@@ -26,7 +26,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _loading = true;
   bool _saving  = false;
   bool _dirty   = false;
-  bool _isCaregiver = false; // <- 🔑 habilita edición de texto/fecha
+  bool _isCaregiver = false; // habilita edición de nombre/apellidos/fecha
 
   // Datos
   DateTime? _birthDate;
@@ -42,6 +42,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _load();
   }
 
+  /// Lee datos del usuario (Auth + Firestore) y popula la UI
   Future<void> _load() async {
     final user = FirebaseAuth.instance.currentUser!;
     final snap = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
@@ -76,7 +77,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
     }
 
-    setState(() => _loading = false);
+    _localPhoto = null;
+    _dirty = false;
+
+    if (mounted) setState(() => _loading = false);
   }
 
   // ===== Helpers =====
@@ -121,23 +125,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  String? _nameRule(String? v) {
-    final s = (v ?? '').trim();
-    if (s.isEmpty) return 'Requerido';
-    if (s.length < 2) return 'Muy corto';
-    return null;
-  }
-
-  String? _dobRule(String? _) {
-    if (!_isCaregiver) return null;
-    if (_birthDate == null) return 'Selecciona tu fecha de nacimiento';
-    final now = DateTime.now();
-    if (_birthDate!.isAfter(now)) return 'Fecha inválida';
-    // límites razonables
-    if (_birthDate!.year < 1900) return 'Fecha inválida';
-    return null;
-  }
-
   Future<void> _pickPhoto() async {
     final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (img != null) {
@@ -150,6 +137,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (!_isCaregiver) return;
     final now = DateTime.now();
     final initial = _birthDate ?? DateTime(now.year - 18, now.month, now.day);
+
     final picked = await showDatePicker(
       context: context,
       locale: const Locale('es'),
@@ -167,13 +155,43 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  /// Subida ROBUSTA de imagen a Storage: evita `object-not-found`
   Future<String?> _uploadPhoto(User user) async {
     if (_localPhoto == null) return _photoUrl;
-    final ref = FirebaseStorage.instance.ref().child('users/${user.uid}/avatar.jpg');
-    await ref.putFile(_localPhoto!);
-    return await ref.getDownloadURL();
+
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('users')
+          .child(user.uid)
+          .child('avatar.jpg');
+
+      final task = await ref.putFile(
+        _localPhoto!,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      if (task.state == TaskState.success) {
+        final url = await ref.getDownloadURL();
+        return url;
+      } else {
+        debugPrint('⚠️ Subida no exitosa: ${task.state}');
+        return _photoUrl;
+      }
+    } on FirebaseException catch (e) {
+      if (e.code == 'object-not-found') {
+        debugPrint('❌ Storage: object-not-found en ${user.uid}/avatar.jpg');
+      } else {
+        debugPrint('❌ Storage error: ${e.code} ${e.message}');
+      }
+      rethrow;
+    } catch (e) {
+      debugPrint('❌ Error subiendo imagen: $e');
+      rethrow;
+    }
   }
 
+  /// Guarda cambios y “resetea” la pantalla (recarga datos + limpia `_dirty`)
   Future<void> _save({bool exitAfter = false}) async {
     if (!_dirty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -184,21 +202,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     setState(() => _saving = true);
     final user = FirebaseAuth.instance.currentUser!;
+
     try {
-      // Foto
+      // ===== FOTO =====
       if (_localPhoto != null) {
         final url = await _uploadPhoto(user);
-        _photoUrl = url;
-        await user.updatePhotoURL(url);
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .set({'photoURL': url}, SetOptions(merge: true));
+        if (url != null) {
+          _photoUrl = url;
+          await user.updatePhotoURL(url);
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({'photoURL': url}, SetOptions(merge: true));
+        }
       }
 
-      // Datos si Cuidador
+      // ===== DATOS (si es cuidador) =====
       if (_isCaregiver) {
         final updates = <String, dynamic>{};
+
         if (_firstName.text.trim() != (_original['firstName'] ?? '')) {
           updates['firstName'] = _firstName.text.trim();
         }
@@ -206,8 +228,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
           updates['lastName'] = _lastName.text.trim();
         }
         if (_birthDate?.toIso8601String() != _original['birthDate']) {
-          updates['birthDate'] = _birthDate; // Firestore Timestamp
+          updates['birthDate'] = _birthDate; // Firestore -> Timestamp
         }
+
         if (updates.isNotEmpty) {
           await FirebaseFirestore.instance
               .collection('users')
@@ -215,25 +238,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
               .set(updates, SetOptions(merge: true));
         }
 
-        // Actualiza displayName si cambió
-        final newDisplayName = '${_firstName.text.trim()} ${_lastName.text.trim()}'.trim();
+        final newDisplayName =
+            '${_firstName.text.trim()} ${_lastName.text.trim()}'.trim();
         if (newDisplayName != ((user.displayName ?? '').trim())) {
           await user.updateDisplayName(newDisplayName);
         }
       }
 
-      // Refrescar originales/estado
-      _original = {
-        'firstName': _firstName.text.trim(),
-        'lastName' : _lastName.text.trim(),
-        'email'    : _email.text.trim(),
-        'photo'    : _photoUrl,
-        'birthDate': _birthDate?.toIso8601String(),
-      };
-      _localPhoto = null;
-      _recomputeDirty();
-
+      // 🔄 refresca auth y recarga los datos para “resetear” la pantalla
       await user.reload();
+      await _load();          // vuelve a leer Firestore/Auth y repuebla
+      _localPhoto = null;
+      _dirty = false;
+      if (mounted) setState(() {});
 
       // ✅ Snackbar verde pastel
       ScaffoldMessenger.of(context).showSnackBar(
@@ -248,6 +265,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
 
       if (exitAfter && mounted) Navigator.maybePop(context);
+    } on FirebaseException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudieron guardar los cambios. (${e.code})')),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudieron guardar los cambios. $e')),
@@ -257,7 +278,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  // ===== Diálogos =====
+  // ===== Diálogos / Confirmaciones =====
   Future<bool> _confirmBeforeLeave() async {
     if (!_dirty) return true;
 
@@ -297,7 +318,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         return true;
       case _LeaveAction.saveAndExit:
         await _save(exitAfter: true);
-        return false; // _save ya intenta salir
+        return false; // _save intenta salir
       case _LeaveAction.keepEditing:
       default:
         return false;
@@ -350,10 +371,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _birthDate = (origDob == null) ? null : DateTime.tryParse(origDob);
     _dobCtrl.text = _birthDate == null ? '' : _fmt(_birthDate!);
     _localPhoto = null;
-    _recomputeDirty();
+    _dirty = false;
+    if (mounted) setState(() {});
   }
 
-  // 📩 Solicitar cambio de contraseña
+  // 📩 Solicitar cambio de contraseña (flujo “olvidé mi contraseña”)
   Future<void> _requestPasswordReset() async {
     final email = _email.text.trim().toLowerCase();
     if (email.isEmpty) {

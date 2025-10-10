@@ -115,18 +115,11 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                       const Text('Selecciona una opción', style: TextStyle(color: kGrey1)),
                       const SizedBox(height: 20),
 
-                      _PillButton(
-                        color: kPurple,
-                        icon: Icons.person_add_outlined,
-                        text: 'Registrar paciente',
-                        onTap: () {
-                          // TODO: conectar a registrar paciente
-                        },
-                      ),
+                      // 🔹 Botón Pacientes (antes "Ver pacientes")
                       _PillButton(
                         color: kPurple,
                         icon: Icons.people_outline,
-                        text: 'Ver pacientes',
+                        text: 'Pacientes',
                         onTap: () {
                           // TODO: conectar a ver pacientes
                         },

@@ -176,15 +176,14 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // Normaliza códigos de Firebase Auth para no revelar si falló el correo o la contraseña
   String _authErrorMessage(FirebaseAuthException e) {
     final code = (e.code).toLowerCase();
 
     const unified = {
       'wrong-password',
       'user-not-found',
-      'invalid-credential',            // SDK nuevo
-      'invalid-login-credentials',     // variante frecuente
+      'invalid-credential',
+      'invalid-login-credentials',
     };
 
     if (unified.contains(code)) {
@@ -335,7 +334,6 @@ class _LoginPageState extends State<LoginPage> {
     FocusScope.of(context).unfocus();
     setState(() {
       _loading = true;
-      // reset de estado visual de error antes de intentar
       _passwordError = false;
       _passwordErrorText = null;
     });
@@ -346,7 +344,7 @@ class _LoginPageState extends State<LoginPage> {
         password: _pass.text,
       );
 
-      // 🔒 Chequeo de verificación con cooldown persistente (sin botón)
+      // 🔒 Verificación
       final user = FirebaseAuth.instance.currentUser!;
       if (!user.emailVerified) {
         final now = DateTime.now();
@@ -358,9 +356,7 @@ class _LoginPageState extends State<LoginPage> {
             await user.sendEmailVerification();
             await _saveVerificationTs(now);
           } on FirebaseAuthException catch (e) {
-            if (e.code != 'too-many-requests') {
-              // debugPrint('sendEmailVerification error: ${e.code}');
-            }
+            if (e.code != 'too-many-requests') {}
           }
         }
 
@@ -465,7 +461,6 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      // 👇 Mensaje unificado + feedback visual en el campo
       final msg = _authErrorMessage(e);
       _showErrorSnack(msg);
       setState(() {
@@ -473,7 +468,6 @@ class _LoginPageState extends State<LoginPage> {
         _passwordErrorText = (msg == 'Correo o contraseña incorrecta.') ? msg : _passwordErrorText;
       });
       _pass.clear();
-      // Sacudir el campo
       _passShakeKey.currentState?.shake();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -530,130 +524,136 @@ class _LoginPageState extends State<LoginPage> {
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
-      child: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 56,
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: 0, top: 8,
-                                child: IconButton.filled(
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0xFFEAEAEA),
-                                    shape: const CircleBorder(),
-                                    fixedSize: const Size(40, 40),
-                                  ),
-                                  onPressed: () {
-                                    // 👇 Ir siempre a ChoiceStart y limpiar el stack
-                                    FocusScope.of(context).unfocus();
-                                    Navigator.pushNamedAndRemoveUntil(
-                                      context,
-                                      '/choice',
-                                      (_) => false,
-                                    );
-                                  },
-                                  icon: const Icon(Icons.arrow_back, color: kInk),
-                                ),
-                              ),
-                              const Center(
-                                child: Text(
-                                  'Iniciar sesión',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w700,
-                                    color: kInk,
+      child: WillPopScope( // 👈 Intercepta botón físico/gesto "Atrás"
+        onWillPop: () async {
+          Navigator.pushNamedAndRemoveUntil(context, '/auth/choice', (route) => false);
+          return false; // evita el pop normal
+        },
+        child: Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 56,
+                            child: Stack(
+                              children: [
+                                Positioned(
+                                  left: 0, top: 8,
+                                  child: IconButton.filled(
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: const Color(0xFFEAEAEA),
+                                      shape: const CircleBorder(),
+                                      fixedSize: const Size(40, 40),
+                                    ),
+                                    onPressed: () {
+                                      // 👈 Flecha: ir a "Comencemos" y limpiar el stack
+                                      FocusScope.of(context).unfocus();
+                                      Navigator.pushNamedAndRemoveUntil(
+                                        context,
+                                        '/auth/choice',
+                                        (_) => false,
+                                      );
+                                    },
+                                    icon: const Icon(Icons.arrow_back, color: kInk),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        const Align(child: BrandLogo(size: 170)),
-                        const SizedBox(height: 22),
-
-                        const _FieldLabel('Correo electrónico'),
-                        const SizedBox(height: 6),
-                        _FieldBox(
-                          controller: _email,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          validator: _emailRule,
-                        ),
-
-                        const SizedBox(height: 14),
-                        const _FieldLabel('Contraseña'),
-                        const SizedBox(height: 6),
-
-                        // 🔥 Campo de contraseña con sacudida y error en rojo
-                        ShakeWidget(
-                          key: _passShakeKey,
-                          child: _FieldBox(
-                            controller: _pass,
-                            obscure: true,
-                            textInputAction: TextInputAction.done,
-                            validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
-                            errorText: _passwordError ? (_passwordErrorText ?? 'Correo o contraseña incorrecta.') : null,
-                            onChanged: (_) {
-                              if (_passwordError) {
-                                setState(() {
-                                  _passwordError = false;
-                                  _passwordErrorText = null;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: AnimatedScale(
-                            scale: pulseScale,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF6A1B9A),
-                              ),
-                              onPressed: _resetSecondsLeft > 0 ? null : _sendPasswordReset,
-                              child: Text(resetLabel),
+                                const Center(
+                                  child: Text(
+                                    'Iniciar sesión',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w700,
+                                      color: kInk,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 28),
+                          const SizedBox(height: 18),
+                          const Align(child: BrandLogo(size: 170)),
+                          const SizedBox(height: 22),
 
-                        Align(
-                          child: SizedBox(
-                            width: 296, height: 56,
-                            child: FilledButton(
-                              style: pillLav(),
-                              onPressed: _loading ? null : _submit,
-                              child: _loading
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(),
-                                    )
-                                  : const Text('Iniciar sesión'),
+                          const _FieldLabel('Correo electrónico'),
+                          const SizedBox(height: 6),
+                          _FieldBox(
+                            controller: _email,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            validator: _emailRule,
+                          ),
+
+                          const SizedBox(height: 14),
+                          const _FieldLabel('Contraseña'),
+                          const SizedBox(height: 6),
+
+                          // 🔥 Campo de contraseña con sacudida y error en rojo
+                          ShakeWidget(
+                            key: _passShakeKey,
+                            child: _FieldBox(
+                              controller: _pass,
+                              obscure: true,
+                              textInputAction: TextInputAction.done,
+                              validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
+                              errorText: _passwordError ? (_passwordErrorText ?? 'Correo o contraseña incorrecta.') : null,
+                              onChanged: (_) {
+                                if (_passwordError) {
+                                  setState(() {
+                                    _passwordError = false;
+                                    _passwordErrorText = null;
+                                  });
+                                }
+                              },
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 28),
-                      ],
+
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: AnimatedScale(
+                              scale: pulseScale,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFF6A1B9A),
+                                ),
+                                onPressed: _resetSecondsLeft > 0 ? null : _sendPasswordReset,
+                                child: Text(resetLabel),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+
+                          Align(
+                            child: SizedBox(
+                              width: 296, height: 56,
+                              child: FilledButton(
+                                style: pillLav(),
+                                onPressed: _loading ? null : _submit,
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : const Text('Iniciar sesión'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -719,10 +719,6 @@ class _FieldBox extends StatelessWidget {
         hintText: '',
         errorText: errorText,        // muestra texto y colorea en rojo
         errorMaxLines: 2,
-        // Si quieres forzar bordes visibles:
-        // border: const OutlineInputBorder(),
-        // enabledBorder: const OutlineInputBorder(),
-        // focusedBorder: const OutlineInputBorder(),
       ),
       style: const TextStyle(fontSize: 16, color: kInk),
     );
@@ -730,7 +726,6 @@ class _FieldBox extends StatelessWidget {
 }
 
 /// ============ ShakeWidget ============
-/// Envuelve un child y expone `shake()` para animar sacudida horizontal.
 class ShakeWidget extends StatefulWidget {
   const ShakeWidget({super.key, required this.child, this.magnitude = 10, this.duration = const Duration(milliseconds: 420)});
   final Widget child;
