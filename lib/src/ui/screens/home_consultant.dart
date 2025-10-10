@@ -4,6 +4,7 @@ import '../theme.dart';
 import 'settings_page.dart';
 
 // 👇 Importa la vista de Consejos
+// Todo poderoso
 import 'tips_page.dart';
 
 class HomeConsultantPage extends StatelessWidget {
@@ -43,7 +44,8 @@ class HomeConsultantPage extends StatelessWidget {
                                   builder: (_) => const SettingsPage()),
                             );
                           },
-                          icon: const Icon(Icons.settings, color: kInk, size: 28),
+                          icon:
+                              const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
                       const BrandLogo(size: 120),
