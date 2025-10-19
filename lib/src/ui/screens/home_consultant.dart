@@ -3,6 +3,10 @@ import '../brand_logo.dart';
 import '../theme.dart';
 import 'settings_page.dart';
 
+// 👇 Importa la vista de Consejos
+// Todo poderoso
+import 'tips_page.dart';
+import 'calendar_page.dart'; // 👈 Agrega esta línea al inicio de tu HomeConsultantPage
 // 👇 Vistas
 import 'tips_page.dart';
 import 'game_page.dart'; // <- corregido (antes: games_page.dart)
@@ -46,7 +50,8 @@ class HomeConsultantPage extends StatelessWidget {
                               ),
                             );
                           },
-                          icon: const Icon(Icons.settings, color: kInk, size: 28),
+                          icon:
+                              const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
                       const BrandLogo(size: 120),
@@ -95,9 +100,15 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.event_note_outlined,
                         text: 'Calendario de recuerdos',
                         onTap: () {
-                          // TODO: Conectar a la vista de Calendario
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CalendarPage(),
+                            ),
+                          );
                         },
                       ),
+
                       _PillButton(
                         color: kBlue,
                         icon: Icons.chat_bubble_outline,

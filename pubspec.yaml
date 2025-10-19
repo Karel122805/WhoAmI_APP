@@ -14,6 +14,9 @@ dependencies:
     sdk: flutter                   # ← ✅ viene del SDK de Flutter
   cupertino_icons: ^1.0.8
 
+  # --- UI / Diseño ---
+  table_calendar: ^3.1.2
+
   # --- Firebase ---
   firebase_core: ^3.4.0
   firebase_auth: ^5.1.0
@@ -52,6 +55,8 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/          # incluye logo.png, bot.gif, etc. dentro de /assets
+    
     - assets/
     - assets/gdevelop_game/
 
