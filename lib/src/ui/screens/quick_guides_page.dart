@@ -130,7 +130,7 @@ class _QuickGuidesPageState extends State<QuickGuidesPage> {
         elevation: 0,
       ),
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 58), // 👈 ajustado
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

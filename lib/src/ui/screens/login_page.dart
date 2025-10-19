@@ -1,5 +1,6 @@
 // lib/src/ui/screens/login_page.dart
-import 'dart:async'; // 👈 Timer para cuenta regresiva y pulso
+import 'dart:async'; // Timer para cuenta regresiva y pulso
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -47,6 +48,11 @@ class _LoginPageState extends State<LoginPage> {
   static const int _pulseThreshold = 10;
   Timer? _pulseTimer;
   bool _pulseUp = false;
+
+  // 🚨 Estado de error en contraseña + shake
+  final GlobalKey<_ShakeWidgetState> _passShakeKey = GlobalKey<_ShakeWidgetState>();
+  bool _passwordError = false;
+  String? _passwordErrorText;
 
   @override
   void initState() {
@@ -155,6 +161,45 @@ class _LoginPageState extends State<LoginPage> {
     if (s.isEmpty) return 'Requerido';
     final ok = RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(s);
     return ok ? null : 'Ingresa un correo válido';
+  }
+
+  // ===== Helpers de error unificado =====
+  void _showErrorSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          msg,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  String _authErrorMessage(FirebaseAuthException e) {
+    final code = (e.code).toLowerCase();
+
+    const unified = {
+      'wrong-password',
+      'user-not-found',
+      'invalid-credential',
+      'invalid-login-credentials',
+    };
+
+    if (unified.contains(code)) {
+      return 'Correo o contraseña incorrecta.';
+    }
+
+    switch (code) {
+      case 'invalid-email':
+        return 'Correo inválido.';
+      case 'too-many-requests':
+        return 'Demasiados intentos. Espera un momento y vuelve a intentar.';
+      case 'user-disabled':
+        return 'La cuenta ha sido deshabilitada.';
+      default:
+        return 'No se pudo iniciar sesión. ($code)';
+    }
   }
 
   // =========================
@@ -287,7 +332,11 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _passwordError = false;
+      _passwordErrorText = null;
+    });
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -295,7 +344,7 @@ class _LoginPageState extends State<LoginPage> {
         password: _pass.text,
       );
 
-      // 🔒 Chequeo de verificación con cooldown persistente (sin botón)
+      // 🔒 Verificación
       final user = FirebaseAuth.instance.currentUser!;
       if (!user.emailVerified) {
         final now = DateTime.now();
@@ -307,9 +356,7 @@ class _LoginPageState extends State<LoginPage> {
             await user.sendEmailVerification();
             await _saveVerificationTs(now);
           } on FirebaseAuthException catch (e) {
-            if (e.code != 'too-many-requests') {
-              // debugPrint('sendEmailVerification error: ${e.code}');
-            }
+            if (e.code != 'too-many-requests') {}
           }
         }
 
@@ -414,23 +461,14 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      String msg = 'No se pudo iniciar sesión.';
-      if (e.code == 'invalid-email') msg = 'Correo inválido.';
-      else if (e.code == 'user-not-found') msg = 'Usuario no encontrado.';
-      else if (e.code == 'wrong-password') msg = 'Contraseña incorrecta.';
-      else if (e.code == 'too-many-requests') {
-        msg = 'Demasiados intentos. Espera un momento y vuelve a intentar. '
-              'Si aún no verificas tu cuenta, revisa tu correo y confirma.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            msg,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
+      final msg = _authErrorMessage(e);
+      _showErrorSnack(msg);
+      setState(() {
+        _passwordError = true;
+        _passwordErrorText = (msg == 'Correo o contraseña incorrecta.') ? msg : _passwordErrorText;
+      });
+      _pass.clear();
+      _passShakeKey.currentState?.shake();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -486,108 +524,136 @@ class _LoginPageState extends State<LoginPage> {
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
-      child: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 56,
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: 0, top: 8,
-                                child: IconButton.filled(
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0xFFEAEAEA),
-                                    shape: const CircleBorder(),
-                                    fixedSize: const Size(40, 40),
+      child: WillPopScope( // 👈 Intercepta botón físico/gesto "Atrás"
+        onWillPop: () async {
+          Navigator.pushNamedAndRemoveUntil(context, '/auth/choice', (route) => false);
+          return false; // evita el pop normal
+        },
+        child: Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 56,
+                            child: Stack(
+                              children: [
+                                Positioned(
+                                  left: 0, top: 8,
+                                  child: IconButton.filled(
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: const Color(0xFFEAEAEA),
+                                      shape: const CircleBorder(),
+                                      fixedSize: const Size(40, 40),
+                                    ),
+                                    onPressed: () {
+                                      // 👈 Flecha: ir a "Comencemos" y limpiar el stack
+                                      FocusScope.of(context).unfocus();
+                                      Navigator.pushNamedAndRemoveUntil(
+                                        context,
+                                        '/auth/choice',
+                                        (_) => false,
+                                      );
+                                    },
+                                    icon: const Icon(Icons.arrow_back, color: kInk),
                                   ),
-                                  onPressed: () => Navigator.maybePop(context),
-                                  icon: const Icon(Icons.arrow_back, color: kInk),
                                 ),
-                              ),
-                              const Center(
-                                child: Text(
-                                  'Iniciar sesión',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w700,
-                                    color: kInk,
+                                const Center(
+                                  child: Text(
+                                    'Iniciar sesión',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w700,
+                                      color: kInk,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        const Align(child: BrandLogo(size: 170)),
-                        const SizedBox(height: 22),
-
-                        const _FieldLabel('Correo electrónico'),
-                        const SizedBox(height: 6),
-                        _FieldBox(
-                          controller: _email,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          validator: _emailRule,
-                        ),
-
-                        const SizedBox(height: 14),
-                        const _FieldLabel('Contraseña'),
-                        const SizedBox(height: 6),
-                        _FieldBox(
-                          controller: _pass,
-                          obscure: true,
-                          textInputAction: TextInputAction.done,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
-                        ),
-
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: AnimatedScale(
-                            scale: pulseScale,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFF6A1B9A),
-                              ),
-                              onPressed: _resetSecondsLeft > 0 ? null : _sendPasswordReset,
-                              child: Text(resetLabel),
+                              ],
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 28),
+                          const SizedBox(height: 18),
+                          const Align(child: BrandLogo(size: 170)),
+                          const SizedBox(height: 22),
 
-                        Align(
-                          child: SizedBox(
-                            width: 296, height: 56,
-                            child: FilledButton(
-                              style: pillLav(),
-                              onPressed: _loading ? null : _submit,
-                              child: _loading
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(),
-                                    )
-                                  : const Text('Iniciar sesión'),
+                          const _FieldLabel('Correo electrónico'),
+                          const SizedBox(height: 6),
+                          _FieldBox(
+                            controller: _email,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            validator: _emailRule,
+                          ),
+
+                          const SizedBox(height: 14),
+                          const _FieldLabel('Contraseña'),
+                          const SizedBox(height: 6),
+
+                          // 🔥 Campo de contraseña con sacudida y error en rojo
+                          ShakeWidget(
+                            key: _passShakeKey,
+                            child: _FieldBox(
+                              controller: _pass,
+                              obscure: true,
+                              textInputAction: TextInputAction.done,
+                              validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
+                              errorText: _passwordError ? (_passwordErrorText ?? 'Correo o contraseña incorrecta.') : null,
+                              onChanged: (_) {
+                                if (_passwordError) {
+                                  setState(() {
+                                    _passwordError = false;
+                                    _passwordErrorText = null;
+                                  });
+                                }
+                              },
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 28),
-                      ],
+
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: AnimatedScale(
+                              scale: pulseScale,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFF6A1B9A),
+                                ),
+                                onPressed: _resetSecondsLeft > 0 ? null : _sendPasswordReset,
+                                child: Text(resetLabel),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+
+                          Align(
+                            child: SizedBox(
+                              width: 296, height: 56,
+                              child: FilledButton(
+                                style: pillLav(),
+                                onPressed: _loading ? null : _submit,
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(),
+                                      )
+                                    : const Text('Iniciar sesión'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -622,6 +688,8 @@ class _FieldBox extends StatelessWidget {
     this.textInputAction = TextInputAction.next,
     this.validator,
     this.keyboardType,
+    this.errorText,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -629,6 +697,12 @@ class _FieldBox extends StatelessWidget {
   final TextInputAction textInputAction;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
+
+  // 🔴 soporte de error visual en el propio campo
+  final String? errorText;
+
+  // 🧹 para limpiar el error mientras escribe
+  final void Function(String)? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -640,8 +714,66 @@ class _FieldBox extends StatelessWidget {
       autocorrect: false,
       enableSuggestions: !obscure,
       validator: validator,
-      decoration: const InputDecoration(hintText: ''),
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: '',
+        errorText: errorText,        // muestra texto y colorea en rojo
+        errorMaxLines: 2,
+      ),
       style: const TextStyle(fontSize: 16, color: kInk),
+    );
+  }
+}
+
+/// ============ ShakeWidget ============
+class ShakeWidget extends StatefulWidget {
+  const ShakeWidget({super.key, required this.child, this.magnitude = 10, this.duration = const Duration(milliseconds: 420)});
+  final Widget child;
+  final double magnitude;
+  final Duration duration;
+
+  @override
+  State<ShakeWidget> createState() => _ShakeWidgetState();
+}
+
+class _ShakeWidgetState extends State<ShakeWidget> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _anim; // 0..1
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _anim = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+  }
+
+  Future<void> shake() async {
+    if (!mounted) return;
+    await _controller.forward(from: 0);
+    if (!mounted) return;
+    _controller.reset();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // Genera sacudida tipo seno con leve amortiguación
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, child) {
+        // 3 oscilaciones amortiguadas
+        final t = _anim.value;
+        final waves = 3;
+        final decay = (1.0 - t); // amortigua hacia 0
+        final dx = math.sin(t * waves * 2 * math.pi) * widget.magnitude * decay;
+        return Transform.translate(offset: Offset(dx, 0), child: child);
+      },
+      child: widget.child,
     );
   }
 }

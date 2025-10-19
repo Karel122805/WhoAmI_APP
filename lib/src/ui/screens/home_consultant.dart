@@ -7,6 +7,10 @@ import 'settings_page.dart';
 // Todo poderoso
 import 'tips_page.dart';
 import 'calendar_page.dart'; // 👈 Agrega esta línea al inicio de tu HomeConsultantPage
+// 👇 Vistas
+import 'tips_page.dart';
+import 'game_page.dart'; // <- corregido (antes: games_page.dart)
+import 'motivational_phrases_page.dart'; // Frases motivadoras
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -21,8 +25,9 @@ class HomeConsultantPage extends StatelessWidget {
         : 'Usuario';
 
     return MediaQuery(
-      data: MediaQuery.of(context)
-          .copyWith(textScaler: const TextScaler.linear(1)),
+      data: MediaQuery.of(context).copyWith(
+        textScaler: const TextScaler.linear(1),
+      ),
       child: Scaffold(
         body: SafeArea(
           child: Center(
@@ -38,11 +43,11 @@ class HomeConsultantPage extends StatelessWidget {
                         alignment: Alignment.centerLeft,
                         child: IconButton(
                           onPressed: () {
-                            // 👇 Navegar a Ajustes
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => const SettingsPage()),
+                                builder: (_) => const SettingsPage(),
+                              ),
                             );
                           },
                           icon:
@@ -73,12 +78,9 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.menu_book_outlined,
                         text: 'Consejos',
                         onTap: () {
-                          // 👇 Navega a la vista de Consejos
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => const TipsPage(),
-                            ),
+                            MaterialPageRoute(builder: (_) => const TipsPage()),
                           );
                         },
                       ),
@@ -87,7 +89,10 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.auto_stories_outlined,
                         text: 'Frases motivadoras',
                         onTap: () {
-                          // TODO: Conectar a la vista de Frases motivadoras
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const MotivationalPhrasesPage()),
+                          );
                         },
                       ),
                       _PillButton(
@@ -112,6 +117,30 @@ class HomeConsultantPage extends StatelessWidget {
                           // TODO: Conectar a la vista de Chat
                         },
                       ),
+                      _PillButton(
+                        color: kBlue,
+                        icon: Icons.videogame_asset_outlined,
+                        text: 'Juegos',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const GamePage(), // <- corregido (antes: GamesPage)
+                            ),
+                          );
+                        },
+                      ),
+
+                      // 🔴 Botón de EMERGENCIA (alineado igual que los demás)
+                      const SizedBox(height: 1),
+                      _PillButton(
+                        color: const Color(0xFFFF9AA0), // tono del ejemplo
+                        icon: Icons.warning_amber_rounded,
+                        text: 'Emergencia',
+                        onTap: () async {
+                          _showComingSoonDialog(context);
+                        },
+                      ),
 
                       const SizedBox(height: 24),
                     ],
@@ -126,6 +155,7 @@ class HomeConsultantPage extends StatelessWidget {
   }
 }
 
+// ===================== COMPONENTES =====================
 class _PillButton extends StatelessWidget {
   const _PillButton({
     required this.color,
@@ -173,4 +203,23 @@ class _PillButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// Diálogo de “próximamente”
+void _showComingSoonDialog(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Emergencia'),
+      content: const Text(
+        'Muy pronto este botón avisará al cuidador con una notificación.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Entendido'),
+        ),
+      ],
+    ),
+  );
 }

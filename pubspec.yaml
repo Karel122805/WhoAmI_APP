@@ -5,11 +5,13 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"   # compatible con Flutter/Dart estables actuales
+  sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:           # ← ✅ agrega este paquete
+    sdk: flutter                   # ← ✅ viene del SDK de Flutter
   cupertino_icons: ^1.0.8
 
   # --- UI / Diseño ---
@@ -40,13 +42,25 @@ dependencies:
   # --- Manejo de permisos ---
   permission_handler: ^11.3.1
 
+  # --- WebView para juegos GDevelop ---
+  flutter_inappwebview: ^6.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+
   assets:
     - assets/          # incluye logo.png, bot.gif, etc. dentro de /assets
     
+    - assets/
+    - assets/gdevelop_game/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"

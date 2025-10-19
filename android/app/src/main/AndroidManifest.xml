@@ -36,7 +36,7 @@
     <!-- ====== APLICACIÓN ====== -->
     <application
         android:name="${applicationName}"
-        android:label="whoami_app"
+        android:label="Who Am I?"
         android:icon="@mipmap/ic_launcher">
 
         <activity
