@@ -6,6 +6,7 @@ import 'settings_page.dart';
 // 👇 Importa la vista de Consejos
 // Todo poderoso
 import 'tips_page.dart';
+import 'calendar_page.dart'; // 👈 Agrega esta línea al inicio de tu HomeConsultantPage
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -94,9 +95,15 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.event_note_outlined,
                         text: 'Calendario de recuerdos',
                         onTap: () {
-                          // TODO: Conectar a la vista de Calendario
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CalendarPage(),
+                            ),
+                          );
                         },
                       ),
+
                       _PillButton(
                         color: kBlue,
                         icon: Icons.chat_bubble_outline,
