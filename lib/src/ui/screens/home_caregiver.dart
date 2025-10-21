@@ -1,13 +1,13 @@
+// lib/src/ui/screens/home_caregiver.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../brand_logo.dart';
 import '../theme.dart';
 import 'settings_page.dart';
-
-// 👇 Importa la vista de Guías rápidas (cuidador)
-import 'quick_guides_page.dart';
+import '../user_avatar.dart';           // Avatar reutilizable
+import 'quick_guides_page.dart';       // Guías rápidas
+import 'patients_list_page.dart';      // 👈 Nueva: Lista de pacientes
 
 class HomeCaregiverPage extends StatefulWidget {
   const HomeCaregiverPage({super.key, this.displayName});
@@ -48,17 +48,17 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                           icon: const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
-                      const BrandLogo(size: 120),
+
+                      // Foto del usuario (avatar)
+                      const UserAvatar(radius: 60),
                       const SizedBox(height: 12),
 
-                      // 👉 Nombre que reacciona a cambios de Auth y Firestore
+                      // Nombre dinámico del cuidador
                       StreamBuilder<User?>(
                         stream: FirebaseAuth.instance.userChanges(),
                         builder: (context, authSnap) {
                           final user = authSnap.data ?? FirebaseAuth.instance.currentUser;
-                          if (user == null) {
-                            return const SizedBox();
-                          }
+                          if (user == null) return const SizedBox();
                           final uid = user.uid;
 
                           return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -69,32 +69,28 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                             builder: (context, docSnap) {
                               String name = 'Cuidador';
 
-                              // 1) Firestore first/last (preferido)
+                              // Firestore: firstName + lastName
                               if (docSnap.hasData && docSnap.data!.data() != null) {
                                 final data = docSnap.data!.data()!;
                                 final first = (data['firstName'] as String?)?.trim() ?? '';
                                 final last  = (data['lastName']  as String?)?.trim() ?? '';
-                                final fsName = [first, last]
-                                    .where((e) => e.isNotEmpty)
-                                    .join(' ');
+                                final fsName = [first, last].where((e) => e.isNotEmpty).join(' ');
                                 if (fsName.isNotEmpty) name = fsName;
                               }
 
-                              // 2) Fallback a displayName de Auth
+                              // Fallback a displayName de Auth
                               if (name == 'Cuidador') {
                                 final dn = (user.displayName ?? '').trim();
                                 if (dn.isNotEmpty) name = dn;
                               }
 
-                              // 3) Fallback a parte local del correo
+                              // Fallback a correo
                               if (name == 'Cuidador') {
                                 final mail = user.email ?? '';
-                                if (mail.contains('@')) {
-                                  name = mail.split('@').first;
-                                }
+                                if (mail.contains('@')) name = mail.split('@').first;
                               }
 
-                              // 4) Fallback final
+                              // Fallback final
                               name = name.isNotEmpty ? name : (widget.displayName ?? 'Cuidador');
 
                               return Text(
@@ -115,17 +111,17 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                       const Text('Selecciona una opción', style: TextStyle(color: kGrey1)),
                       const SizedBox(height: 20),
 
-                      // 🔹 Botón Pacientes (antes "Ver pacientes")
+                      // 🔹 Botón Pacientes
                       _PillButton(
                         color: kPurple,
                         icon: Icons.people_outline,
                         text: 'Pacientes',
                         onTap: () {
-                          // TODO: conectar a ver pacientes
+                          Navigator.pushNamed(context, PatientsListPage.route);
                         },
                       ),
 
-                      // Guías Rápidas
+                      // 🔹 Guías Rápidas
                       _PillButton(
                         color: kPurple,
                         icon: Icons.menu_book_outlined,
@@ -138,6 +134,7 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                         },
                       ),
 
+                      // 🔹 Calendario
                       _PillButton(
                         color: kPurple,
                         icon: Icons.event_note_outlined,
@@ -146,6 +143,8 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                           // TODO: conectar a calendario
                         },
                       ),
+
+                      // 🔹 Chat IA
                       _PillButton(
                         color: kPurple,
                         icon: Icons.chat_bubble_outline,

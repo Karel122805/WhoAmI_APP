@@ -18,14 +18,24 @@ class RegisterRolePage extends StatefulWidget {
 class _RegisterRolePageState extends State<RegisterRolePage> {
   bool _saving = false;
 
+  String _buildDisplayName(String? nombre, String? apellidos, String? email) {
+    final n = (nombre ?? '').trim();
+    final a = (apellidos ?? '').trim();
+    final byName = [n, a].where((e) => e.isNotEmpty).join(' ').trim();
+    if (byName.isNotEmpty) return byName;
+    return (email ?? '').trim();
+  }
+
   Future<void> _finishSignUp(String role) async {
     final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
-    final email    = (args['email'] as String?)?.trim();
-    final password = args['password'] as String?;
-    final nombre   = (args['nombre'] as String?)?.trim();
-    final apellidos= (args['apellidos'] as String?)?.trim();
+    final emailRaw   = (args['email'] as String?)?.trim();
+    final password   = args['password'] as String?;
+    final nombre     = (args['nombre'] as String?)?.trim();
+    final apellidos  = (args['apellidos'] as String?)?.trim();
     final birthdayIso = args['birthday'] as String?;
-    final birthday = birthdayIso != null ? DateTime.tryParse(birthdayIso) : null;
+    final birthday   = birthdayIso != null ? DateTime.tryParse(birthdayIso) : null;
+
+    final email = emailRaw?.toLowerCase();
 
     if (email == null || password == null || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -36,77 +46,123 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
 
     setState(() => _saving = true);
     try {
+      // 1) Crear la cuenta en Auth
       final cred = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
       final uid = cred.user!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'email': email,
-        'firstName': nombre,
-        'lastName': apellidos,
-        'birthday': birthday != null ? Timestamp.fromDate(birthday) : null,
-        'role': role,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
 
-      await cred.user!.updateDisplayName(
-        [nombre, apellidos].where((e) => (e ?? '').isNotEmpty).join(' '),
-      );
+      // 2) Preparar payload normalizado (sin duplicados) en users/{uid}
+      final displayName = _buildDisplayName(nombre, apellidos, email);
+      final data = <String, dynamic>{
+        'email'            : email,
+        'firstName'        : nombre ?? '',
+        'lastName'         : apellidos ?? '',
+        'displayName'      : displayName,
+        'displayNameLower' : displayName.toLowerCase(),
+        'role'             : role, // "Cuidador" o "Consultante"
+        'archived'         : false,
+        'caregiverId'      : null, // clave para asignaciones posteriores
+        'updatedAt'        : FieldValue.serverTimestamp(),
+        'createdAt'        : FieldValue.serverTimestamp(),
+        if (birthday != null) 'birthday': Timestamp.fromDate(birthday),
+      };
 
-      if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Cuenta creada'),
-            content: const Text(
-              'Tu cuenta se creó correctamente. Verifica tu correo electrónico antes de iniciar sesión.'
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Aceptar'),
-              )
-            ],
-          ),
+      // 3) Guardar/merge en users/{uid} (1:1 con Auth, imposible duplicar)
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .set(data, SetOptions(merge: true));
+
+      // 4) Actualizar displayName en Auth (solo para conveniencia)
+      await cred.user!.updateDisplayName(displayName);
+
+      // 5) Enviar correo de verificación
+      try {
+        await cred.user!.sendEmailVerification();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo enviar el correo de verificación. $e')),
         );
       }
 
+      // 6) Dialog informativo
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (_) {
+            bool _resending = false;
+            return StatefulBuilder(
+              builder: (ctx, setDlg) => AlertDialog(
+                title: const Text('Cuenta creada'),
+                content: Text(
+                  'Tu cuenta se creó correctamente.\n\n'
+                  'Te enviamos un correo a:\n$email\n\n'
+                  'Abre el enlace de verificación para activar tu cuenta antes de iniciar sesión.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: _resending
+                        ? null
+                        : () async {
+                            setDlg(() => _resending = true);
+                            try {
+                              await cred.user!.sendEmailVerification();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Correo de verificación reenviado.')),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('No se pudo reenviar. $e')),
+                                );
+                              }
+                            } finally {
+                              if (ctx.mounted) setDlg(() => _resending = false);
+                            }
+                          },
+                    child: _resending
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Reenviar'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Aceptar'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      }
+
+      // 7) Cerrar sesión y llevar al login
       await FirebaseAuth.instance.signOut();
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(context, LoginPage.route, (_) => false);
       }
     } on FirebaseAuthException catch (e) {
       String msg = 'Ocurrió un problema.';
-      if (e.code == 'email-already-in-use') {
-        msg = 'Este correo ya está en uso. Intenta con otro.';
-      } else if (e.code == 'invalid-email') {
-        msg = 'El correo no es válido.';
-      } else if (e.code == 'weak-password') {
-        msg = 'La contraseña es muy débil.';
+      switch (e.code) {
+        case 'email-already-in-use':
+          msg = 'Este correo ya está en uso. Intenta con otro.'; break;
+        case 'invalid-email':
+          msg = 'El correo no es válido.'; break;
+        case 'weak-password':
+          msg = 'La contraseña es muy débil.'; break;
       }
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            msg,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          content: Text(msg, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           backgroundColor: Colors.red,
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Error: $e',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          content: Text('Error: $e', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           backgroundColor: Colors.red,
         ),
       );
@@ -150,11 +206,7 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                             const Center(
                               child: Text(
                                 'Regístrate',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  color: kInk,
-                                ),
+                                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: kInk),
                               ),
                             ),
                           ],
@@ -167,11 +219,7 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                       const Text(
                         'Selecciona un tipo\nde usuario',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: kInk,
-                        ),
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: kInk),
                       ),
                       const SizedBox(height: 24),
 
@@ -182,11 +230,7 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                             style: pillLav(),
                             onPressed: _saving ? null : () => _finishSignUp('Cuidador'),
                             child: _saving
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(),
-                                )
+                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator())
                               : const Text('Cuidador'),
                           ),
                         ),
@@ -201,11 +245,7 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                             style: pillBlue(),
                             onPressed: _saving ? null : () => _finishSignUp('Consultante'),
                             child: _saving
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(),
-                                )
+                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator())
                               : const Text('Consultante'),
                           ),
                         ),

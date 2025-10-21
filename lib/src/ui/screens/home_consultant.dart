@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import '../brand_logo.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../theme.dart';
 import 'settings_page.dart';
+import '../user_avatar.dart';                    // 👈 avatar reutilizable
 
 // 👇 Vistas
 import 'tips_page.dart';
-import 'game_page.dart'; // <- corregido (antes: games_page.dart)
-import 'motivational_phrases_page.dart'; // Frases motivadoras
+import 'game_page.dart';
+import 'motivational_phrases_page.dart';
 
 class HomeConsultantPage extends StatelessWidget {
   const HomeConsultantPage({super.key, this.displayName});
@@ -16,14 +19,8 @@ class HomeConsultantPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = (displayName?.trim().isNotEmpty ?? false)
-        ? displayName!.trim()
-        : 'Usuario';
-
     return MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        textScaler: const TextScaler.linear(1),
-      ),
+      data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1)),
       child: Scaffold(
         body: SafeArea(
           child: Center(
@@ -41,30 +38,73 @@ class HomeConsultantPage extends StatelessWidget {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) => const SettingsPage(),
-                              ),
+                              MaterialPageRoute(builder: (_) => const SettingsPage()),
                             );
                           },
                           icon: const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
-                      const BrandLogo(size: 120),
+
+                      // 👇 Foto del usuario (o avatar por defecto). Solo visual.
+                      const UserAvatar(radius: 60),
                       const SizedBox(height: 12),
-                      Text(
-                        'Bienvenido $name',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          color: kInk,
-                        ),
+
+                      // 👇 Nombre reactivo (Firestore/Auth) con fallbacks
+                      StreamBuilder<User?>(
+                        stream: FirebaseAuth.instance.userChanges(),
+                        builder: (context, authSnap) {
+                          final user = authSnap.data ?? FirebaseAuth.instance.currentUser;
+                          if (user == null) return const SizedBox();
+                          final uid = user.uid;
+
+                          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(uid)
+                                .snapshots(),
+                            builder: (context, docSnap) {
+                              String name = 'Usuario';
+
+                              // 1) Firestore first/last
+                              if (docSnap.hasData && docSnap.data!.data() != null) {
+                                final data = docSnap.data!.data()!;
+                                final first = (data['firstName'] as String?)?.trim() ?? '';
+                                final last  = (data['lastName']  as String?)?.trim() ?? '';
+                                final fsName = [first, last].where((e) => e.isNotEmpty).join(' ');
+                                if (fsName.isNotEmpty) name = fsName;
+                              }
+
+                              // 2) displayName de Auth
+                              if (name == 'Usuario') {
+                                final dn = (user.displayName ?? '').trim();
+                                if (dn.isNotEmpty) name = dn;
+                              }
+
+                              // 3) parte local del correo
+                              if (name == 'Usuario') {
+                                final mail = user.email ?? '';
+                                if (mail.contains('@')) name = mail.split('@').first;
+                              }
+
+                              // 4) fallback final al argumento
+                              name = name.isNotEmpty ? name : (displayName ?? 'Usuario');
+
+                              return Text(
+                                'Bienvenido $name',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: kInk,
+                                ),
+                              );
+                            },
+                          );
+                        },
                       ),
+
                       const SizedBox(height: 8),
-                      const Text(
-                        'Selecciona una opción',
-                        style: TextStyle(color: kGrey1),
-                      ),
+                      const Text('Selecciona una opción', style: TextStyle(color: kGrey1)),
                       const SizedBox(height: 20),
 
                       // >>> BOTONES
@@ -73,10 +113,7 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.menu_book_outlined,
                         text: 'Consejos',
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const TipsPage()),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const TipsPage()));
                         },
                       ),
                       _PillButton(
@@ -84,10 +121,7 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.auto_stories_outlined,
                         text: 'Frases motivadoras',
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const MotivationalPhrasesPage()),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const MotivationalPhrasesPage()));
                         },
                       ),
                       _PillButton(
@@ -111,24 +145,16 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.videogame_asset_outlined,
                         text: 'Juegos',
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const GamePage(), // <- corregido (antes: GamesPage)
-                            ),
-                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const GamePage()));
                         },
                       ),
 
-                      // 🔴 Botón de EMERGENCIA (alineado igual que los demás)
                       const SizedBox(height: 1),
                       _PillButton(
-                        color: const Color(0xFFFF9AA0), // tono del ejemplo
+                        color: const Color(0xFFFF9AA0),
                         icon: Icons.warning_amber_rounded,
                         text: 'Emergencia',
-                        onTap: () async {
-                          _showComingSoonDialog(context);
-                        },
+                        onTap: () => _showComingSoonDialog(context),
                       ),
 
                       const SizedBox(height: 24),
@@ -180,11 +206,7 @@ class _PillButton extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 text,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: kInk,
-                ),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: kInk),
               ),
             ],
           ),
@@ -200,9 +222,7 @@ void _showComingSoonDialog(BuildContext context) {
     context: context,
     builder: (_) => AlertDialog(
       title: const Text('Emergencia'),
-      content: const Text(
-        'Muy pronto este botón avisará al cuidador con una notificación.',
-      ),
+      content: const Text('Muy pronto este botón avisará al cuidador con una notificación.'),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

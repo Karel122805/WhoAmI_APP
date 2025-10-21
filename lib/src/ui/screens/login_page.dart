@@ -11,10 +11,8 @@ import '../theme.dart';
 import 'home_caregiver.dart';
 import 'home_consultant.dart';
 
-// 👇 agrega / reemplaza
 import 'package:whoami_app/services/biometric_auth_service.dart';
 import 'package:whoami_app/src/ui/screens/lock_screen.dart';
-import 'package:whoami_app/src/ui/screens/home_router.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -58,7 +56,7 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     _loadCooldowns().then((_) {
-      _startResetCountdownIfNeeded(); // inicia contador si corresponde
+      _startResetCountdownIfNeeded();
     });
     _maybeShowLock();
   }
@@ -69,6 +67,43 @@ class _LoginPageState extends State<LoginPage> {
     _pulseTimer?.cancel();
     super.dispose();
   }
+
+  // ========= PERFIL: asegurar users/{uid} normalizado =========
+  Future<void> _ensureUserProfile(User user) async {
+    final db = FirebaseFirestore.instance;
+    final ref = db.collection('users').doc(user.uid);
+    final snap = await ref.get();
+    final m = snap.data() ?? <String, dynamic>{};
+
+    // Preferir lo que ya haya en Firestore, si no caer a Auth
+    final firstName = ((m['firstName'] ?? '') as String).trim();
+    final lastName  = ((m['lastName']  ?? '') as String).trim();
+
+    String display = ((m['displayName'] ?? '') as String).trim();
+    if (display.isEmpty) {
+      if (firstName.isNotEmpty || lastName.isNotEmpty) {
+        display = '$firstName $lastName'.trim();
+      } else {
+        display = (user.displayName ?? user.email?.split('@').first ?? 'Usuario').trim();
+      }
+    }
+
+    final payload = <String, dynamic>{
+      'email'            : (user.email ?? '').toLowerCase(),
+      'firstName'        : firstName,
+      'lastName'         : lastName,
+      'displayName'      : display,
+      'displayNameLower' : display.toLowerCase(),
+      'role'             : (m['role'] ?? ''), // no lo sobreescribimos aquí
+      'archived'         : (m['archived'] ?? false) == true ? true : false,
+      'caregiverId'      : m.containsKey('caregiverId') ? m['caregiverId'] : null,
+      'updatedAt'        : FieldValue.serverTimestamp(),
+      if (!snap.exists) 'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    await ref.set(payload, SetOptions(merge: true));
+  }
+  // ============================================================
 
   Future<void> _loadCooldowns() async {
     final prefs = await SharedPreferences.getInstance();
@@ -133,7 +168,7 @@ class _LoginPageState extends State<LoginPage> {
     if (_pulseTimer != null) return;
     _pulseTimer = Timer.periodic(const Duration(milliseconds: 600), (_) {
       if (!mounted) return;
-      _pulseUp = !_pulseUp; // alterna el escalado
+      _pulseUp = !_pulseUp;
       setState(() {});
     });
   }
@@ -144,15 +179,69 @@ class _LoginPageState extends State<LoginPage> {
     _pulseUp = false;
   }
 
+  // ⛳️ Si hay sesión + AppLock, pedimos huella/cara y redirigimos directo al Home según rol.
   Future<void> _maybeShowLock() async {
     final current = FirebaseAuth.instance.currentUser;
-    if (current != null) {
-      final enabled = await BiometricAuthService.instance.getAppLockEnabled();
-      if (enabled && mounted) {
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const LockScreen()),
+    if (current == null) return;
+
+    final enabled = await BiometricAuthService.instance.getAppLockEnabled();
+    if (!enabled || !mounted) return;
+
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const LockScreen()),
+    );
+
+    if (ok != true) return;
+
+    try {
+      // 🔒 Asegurar perfil antes de leer rol
+      await _ensureUserProfile(current);
+
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(current.uid)
+          .get();
+
+      final data = snap.data() ?? {};
+      final role = (data['role'] as String?)?.trim();
+
+      final firstName = (data['firstName'] as String?)?.trim();
+      final lastName  = (data['lastName'] as String?)?.trim();
+      final displayFromFs =
+          [firstName, lastName].where((e) => (e ?? '').isNotEmpty).join(' ');
+      final name = displayFromFs.isNotEmpty
+          ? displayFromFs
+          : (current.displayName ?? current.email?.split('@').first ?? 'Usuario');
+
+      if (!mounted) return;
+
+      if (role == 'Cuidador') {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          HomeCaregiverPage.route,
+          (_) => false,
+          arguments: {'name': name},
+        );
+      } else if (role == 'Consultante') {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          HomeConsultantPage.route,
+          (_) => false,
+          arguments: {'name': name},
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tu cuenta no tiene rol asignado.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al redirigir: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -163,7 +252,6 @@ class _LoginPageState extends State<LoginPage> {
     return ok ? null : 'Ingresa un correo válido';
   }
 
-  // ===== Helpers de error unificado =====
   void _showErrorSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -248,7 +336,6 @@ class _LoginPageState extends State<LoginPage> {
       email = typed.trim().toLowerCase();
     }
 
-    // ⏱️ Cooldown para reset con contador
     final now = DateTime.now();
     final canSend = _lastResetEmailAt == null ||
         now.difference(_lastResetEmailAt!) >= _resetCooldown;
@@ -272,7 +359,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       await _saveResetTs(now);
-      _startResetCountdownIfNeeded(); // empieza contador
+      _startResetCountdownIfNeeded();
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -287,7 +374,7 @@ class _LoginPageState extends State<LoginPage> {
 
       showDialog(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (ctx) => AlertDialog(
           title: const Text('Revisa tu correo'),
           content: Text(
             'Te enviamos un enlace para restablecer tu contraseña a:\n\n$email\n\n'
@@ -296,7 +383,7 @@ class _LoginPageState extends State<LoginPage> {
           actions: [
             TextButton(
               style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(ctx),
               child: const Text('Ok'),
             ),
           ],
@@ -344,8 +431,8 @@ class _LoginPageState extends State<LoginPage> {
         password: _pass.text,
       );
 
-      // 🔒 Verificación
       final user = FirebaseAuth.instance.currentUser!;
+      // 🔒 Verificación
       if (!user.emailVerified) {
         final now = DateTime.now();
         final canResend = _lastVerificationEmailAt == null ||
@@ -372,7 +459,7 @@ class _LoginPageState extends State<LoginPage> {
 
         await showDialog(
           context: context,
-          builder: (_) => AlertDialog(
+          builder: (ctx) => AlertDialog(
             title: const Text('Verifica tu correo'),
             content: Text(
               'Tu cuenta aún no está verificada.\n\n'
@@ -384,7 +471,7 @@ class _LoginPageState extends State<LoginPage> {
             actions: [
               TextButton(
                 style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(ctx),
                 child: const Text('Entendido'),
               ),
             ],
@@ -397,7 +484,6 @@ class _LoginPageState extends State<LoginPage> {
               canResend
                   ? 'Te enviamos el enlace de verificación. Revisa tu correo.'
                   : 'Ya enviamos un enlace recientemente. Intenta de nuevo en ~${secondsLeft}s.',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             backgroundColor: Colors.red,
           ),
@@ -407,12 +493,23 @@ class _LoginPageState extends State<LoginPage> {
         return; // 🚫 no continúa al Home
       }
 
-      // Biometría/PIN
+      // 🧾 Asegurar/normalizar perfil en users/{uid}
+      await _ensureUserProfile(user);
+
+      // ======= Biometría / PIN =======
       final supported = await BiometricAuthService.instance.canCheckBiometrics();
       if (supported) {
-        final enable = await _askEnableQuickUnlock(context);
-        await BiometricAuthService.instance.setAppLockEnabled(enable);
+        final enableQuick = await _askEnableQuickUnlock(context);
+        await BiometricAuthService.instance.setBiometricEnabled(enableQuick);
+
+        if (enableQuick) {
+          final lockOn = await _askLockOnLaunch(context);
+          await BiometricAuthService.instance.setAppLockEnabled(lockOn);
+        } else {
+          await BiometricAuthService.instance.setAppLockEnabled(false);
+        }
       } else {
+        await BiometricAuthService.instance.setBiometricEnabled(false);
         await BiometricAuthService.instance.setAppLockEnabled(false);
       }
 
@@ -487,7 +584,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<bool> _askEnableQuickUnlock(BuildContext context) async {
     final agree = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Activar inicio rápido'),
         content: const Text(
           'Podrás entrar con huella, rostro o PIN del dispositivo. '
@@ -496,18 +593,43 @@ class _LoginPageState extends State<LoginPage> {
         actions: [
           TextButton(
             style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Después'),
           ),
           FilledButton(
             style: pillLav(),
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Activar'),
           ),
         ],
       ),
     );
     return agree ?? false;
+  }
+
+  Future<bool> _askLockOnLaunch(BuildContext context) async {
+    final ans = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bloquear al abrir'),
+        content: const Text(
+          '¿Quieres que la app pida huella/rostro cada que la abras (si tu sesión sigue activa)?',
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            style: pillLav(),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sí'),
+          ),
+        ],
+      ),
+    );
+    return ans ?? false;
   }
 
   @override
@@ -524,10 +646,10 @@ class _LoginPageState extends State<LoginPage> {
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
-      child: WillPopScope( // 👈 Intercepta botón físico/gesto "Atrás"
+      child: WillPopScope(
         onWillPop: () async {
           Navigator.pushNamedAndRemoveUntil(context, '/auth/choice', (route) => false);
-          return false; // evita el pop normal
+          return false;
         },
         child: Scaffold(
           body: SafeArea(
@@ -556,7 +678,6 @@ class _LoginPageState extends State<LoginPage> {
                                       fixedSize: const Size(40, 40),
                                     ),
                                     onPressed: () {
-                                      // 👈 Flecha: ir a "Comencemos" y limpiar el stack
                                       FocusScope.of(context).unfocus();
                                       Navigator.pushNamedAndRemoveUntil(
                                         context,
@@ -647,7 +768,7 @@ class _LoginPageState extends State<LoginPage> {
                                         height: 22,
                                         child: CircularProgressIndicator(),
                                       )
-                                    : const Text('Iniciar sesión'),
+                                    : const Text('Entrar'),
                               ),
                             ),
                           ),
@@ -715,9 +836,10 @@ class _FieldBox extends StatelessWidget {
       enableSuggestions: !obscure,
       validator: validator,
       onChanged: onChanged,
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         hintText: '',
-        errorText: errorText,        // muestra texto y colorea en rojo
+      ).copyWith(
+        errorText: errorText,
         errorMaxLines: 2,
       ),
       style: const TextStyle(fontSize: 16, color: kInk),
@@ -726,6 +848,7 @@ class _FieldBox extends StatelessWidget {
 }
 
 /// ============ ShakeWidget ============
+/// (igual que el tuyo)
 class ShakeWidget extends StatefulWidget {
   const ShakeWidget({super.key, required this.child, this.magnitude = 10, this.duration = const Duration(milliseconds: 420)});
   final Widget child;
@@ -766,10 +889,9 @@ class _ShakeWidgetState extends State<ShakeWidget> with SingleTickerProviderStat
     return AnimatedBuilder(
       animation: _anim,
       builder: (_, child) {
-        // 3 oscilaciones amortiguadas
         final t = _anim.value;
         final waves = 3;
-        final decay = (1.0 - t); // amortigua hacia 0
+        final decay = (1.0 - t);
         final dx = math.sin(t * waves * 2 * math.pi) * widget.magnitude * decay;
         return Transform.translate(offset: Offset(dx, 0), child: child);
       },

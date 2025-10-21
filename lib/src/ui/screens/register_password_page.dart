@@ -18,6 +18,10 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
   final _pass2 = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  // 👁️ Visibilidad de contraseñas
+  bool _obscure1 = true;
+  bool _obscure2 = true;
+
   // ======= Estado del indicador de seguridad =======
   int _passScore = 0;             // 0..5
   String _passLabel = 'Vacía';    // etiqueta visible
@@ -62,8 +66,7 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
     if (RegExp(r'[0-9]').hasMatch(s)) score++;          // número
     if (RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-]').hasMatch(s)) score++; // símbolo
     if (s.length >= 12) score++;                        // bonus por longitud
-    // score final 0..5
-    return score;
+    return score; // 0..5
   }
 
   String _passwordLabel(int score) {
@@ -158,10 +161,15 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                         const SizedBox(height: 6),
                         _FieldBox(
                           controller: _pass,
-                          obscure: true,
+                          obscure: _obscure1,
                           textInputAction: TextInputAction.next,
                           validator: _passRule,
-                          onChanged: _updatePasswordStrength, // 👈 actualiza indicador en vivo
+                          onChanged: _updatePasswordStrength, // indicador en vivo
+                          suffixIcon: IconButton(
+                            onPressed: () => setState(() => _obscure1 = !_obscure1),
+                            icon: Icon(_obscure1 ? Icons.visibility_off : Icons.visibility),
+                            tooltip: _obscure1 ? 'Mostrar' : 'Ocultar',
+                          ),
                         ),
 
                         // Indicador de seguridad
@@ -184,9 +192,18 @@ class _RegisterPasswordPageState extends State<RegisterPasswordPage> {
                         const SizedBox(height: 6),
                         _FieldBox(
                           controller: _pass2,
-                          obscure: true,
+                          obscure: _obscure2,
                           textInputAction: TextInputAction.done,
-                          validator: (v) => v != _pass.text ? 'No coincide' : null,
+                          validator: (v) {
+                            if ((v ?? '').isEmpty) return 'Requerido';
+                            if (v != _pass.text) return 'No coincide';
+                            return null;
+                          },
+                          suffixIcon: IconButton(
+                            onPressed: () => setState(() => _obscure2 = !_obscure2),
+                            icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility),
+                            tooltip: _obscure2 ? 'Mostrar' : 'Ocultar',
+                          ),
                         ),
 
                         const SizedBox(height: 28),
@@ -244,6 +261,7 @@ class _FieldBox extends StatelessWidget {
     this.validator,
     this.keyboardType,
     this.onChanged,
+    this.suffixIcon, // 👈 NUEVO: admite botón de mostrar/ocultar
   });
 
   final TextEditingController controller;
@@ -252,6 +270,7 @@ class _FieldBox extends StatelessWidget {
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
   final void Function(String)? onChanged;
+  final Widget? suffixIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +283,10 @@ class _FieldBox extends StatelessWidget {
       enableSuggestions: !obscure,
       validator: validator,
       onChanged: onChanged,
-      decoration: const InputDecoration(hintText: ''),
+      decoration: InputDecoration(
+        hintText: '',
+        suffixIcon: suffixIcon,
+      ),
       style: const TextStyle(fontSize: 16, color: kInk),
     );
   }

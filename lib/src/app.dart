@@ -1,4 +1,6 @@
+// lib/app.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'ui/theme.dart';
 
 // Raíz
@@ -19,7 +21,11 @@ import 'ui/screens/home_consultant.dart';
 
 // ajustes
 import 'ui/screens/settings_page.dart';
-import 'ui/screens/edit_profile_page.dart'; // 👈 NUEVO: para la ruta de editar perfil
+import 'ui/screens/edit_profile_page.dart';
+
+// 👇 NUEVO: vistas de pacientes
+import 'ui/screens/patients_list_page.dart';
+import 'ui/screens/register_patient_page.dart';
 
 class WhoAmIApp extends StatelessWidget {
   const WhoAmIApp({super.key});
@@ -31,13 +37,24 @@ class WhoAmIApp extends StatelessWidget {
       title: 'Who Am I?',
       theme: appTheme,
 
-      // Usamos rutas con nombre
+      // Habilita idioma español
+      supportedLocales: const [
+        Locale('es'),
+        Locale('es', 'MX'),
+        Locale('en'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      locale: const Locale('es', 'MX'),
+
+      // Rutas de navegación
       initialRoute: '/',
       routes: {
-        // Raíz (controla splash / comencemos / home)
+        // Raíz y flujo inicial
         '/': (_) => const AuthGate(),
-
-        // Flujo sin sesión
         '/auth/choice': (_) => const ChoiceStart(),
         '/login': (_) => const LoginPage(),
 
@@ -58,7 +75,11 @@ class WhoAmIApp extends StatelessWidget {
 
         // Ajustes
         '/settings': (_) => const SettingsPage(),
-        '/settings/edit-profile': (_) => const EditProfilePage(), // 👈 NUEVA RUTA
+        '/settings/edit-profile': (_) => const EditProfilePage(),
+
+        // 👇 Pacientes
+        PatientsListPage.route: (_) => const PatientsListPage(),
+        RegisterPatientPage.route: (_) => const RegisterPatientPage(),
       },
     );
   }
