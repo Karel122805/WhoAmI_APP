@@ -4,15 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../theme.dart';
 import 'settings_page.dart';
-import '../user_avatar.dart';                    // 👈 avatar reutilizable
+import '../user_avatar.dart';
 
-// 👇 Importa la vista de Consejos
-// Todo poderoso
-import 'tips_page.dart';
-import 'calendar_page.dart'; // 👈 Agrega esta línea al inicio de tu HomeConsultantPage
 // 👇 Vistas
 import 'tips_page.dart';
-import 'game_page.dart';
+import 'calendar_page.dart';
+import 'game_page.dart' as games; // 🔑 evitar choques de nombres
 import 'motivational_phrases_page.dart';
 
 class HomeConsultantPage extends StatelessWidget {
@@ -45,12 +42,11 @@ class HomeConsultantPage extends StatelessWidget {
                               MaterialPageRoute(builder: (_) => const SettingsPage()),
                             );
                           },
-                          icon:
-                              const Icon(Icons.settings, color: kInk, size: 28),
+                          icon: const Icon(Icons.settings, color: kInk, size: 28),
                         ),
                       ),
 
-                      // 👇 Foto del usuario (o avatar por defecto). Solo visual.
+                      // 👇 Foto del usuario (o avatar por defecto)
                       const UserAvatar(radius: 60),
                       const SizedBox(height: 12),
 
@@ -136,13 +132,10 @@ class HomeConsultantPage extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => const CalendarPage(),
-                            ),
+                            MaterialPageRoute(builder: (_) => const CalendarPage()),
                           );
                         },
                       ),
-
                       _PillButton(
                         color: kBlue,
                         icon: Icons.chat_bubble_outline,
@@ -156,7 +149,10 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.videogame_asset_outlined,
                         text: 'Juegos',
                         onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const GamePage()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const games.GamesPage()),
+                          );
                         },
                       ),
 
@@ -231,15 +227,16 @@ class _PillButton extends StatelessWidget {
 void _showComingSoonDialog(BuildContext context) {
   showDialog<void>(
     context: context,
-    builder: (_) => AlertDialog(
+    builder: (ctx) => AlertDialog(
       title: const Text('Emergencia'),
       content: const Text('Muy pronto este botón avisará al cuidador con una notificación.'),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.of(ctx).pop(), // cierra el diálogo
           child: const Text('Entendido'),
         ),
       ],
     ),
   );
 }
+

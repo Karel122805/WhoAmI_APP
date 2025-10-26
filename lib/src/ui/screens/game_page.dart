@@ -1,90 +1,113 @@
 // lib/src/ui/screens/game_page.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../theme.dart'; // correcto: sube un nivel desde screens
+import 'memorama_page.dart'; // vista del juego
 
-class GamePage extends StatefulWidget {
-  static const route = '/game';
-  const GamePage({super.key});
-
-  @override
-  State<GamePage> createState() => _GamePageState();
-}
-
-class _GamePageState extends State<GamePage> {
-  InAppWebViewController? _controller;
-  bool _loading = true;
-  String? _html; // contenido del index.html
-
-  // Ruta base a assets en Android:
-  static const String _androidAssetsBase =
-      'file:///android_asset/flutter_assets/assets/gdevelop_game/';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadHtml();
-  }
-
-  Future<void> _loadHtml() async {
-    try {
-      final html = await rootBundle.loadString('assets/gdevelop_game/index.html');
-      setState(() {
-        _html = html;
-      });
-    } catch (e) {
-      setState(() {
-        _html = '<h2 style="color:white;background:#000;'
-            'text-align:center;margin-top:30vh">'
-            'No se pudo leer index.html<br>${e.toString()}</h2>';
-        _loading = false;
-      });
-    }
-  }
+class GamesPage extends StatelessWidget {
+  const GamesPage({super.key});
+  static const route = '/games';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('Neurorama – Mini juego')),
-      body: _html == null
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
+      appBar: AppBar(
+        title: const Text('Juegos'),
+        backgroundColor: Colors.white,
+        foregroundColor: kInk, // texto/íconos negros
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                SafeArea(
-                  child: InAppWebView(
-                    // 👇 Cargamos el HTML como string y fijamos un baseUrl
-                    initialData: InAppWebViewInitialData(
-                      data: _html!,
-                      baseUrl: WebUri(_androidAssetsBase),
-                      // historyUrl opcional:
-                      // historyUrl: WebUri('about:blank'),
-                    ),
-                    initialSettings: InAppWebViewSettings(
-                      allowFileAccessFromFileURLs: true,
-                      allowUniversalAccessFromFileURLs: true,
-                      mediaPlaybackRequiresUserGesture: false,
-                      useHybridComposition: true,
-                      javaScriptEnabled: true,
-                    ),
-                    onWebViewCreated: (c) => _controller = c,
-                    onLoadStop: (c, url) {
-                      setState(() => _loading = false);
-                    },
-                    onLoadError: (c, url, code, message) {
-                      setState(() {
-                        _loading = false;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error cargando juego: $message')),
-                      );
-                    },
+                const Text(
+                  'Selecciona un juego',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: kInk,
                   ),
                 ),
-                if (_loading)
-                  const Center(child: CircularProgressIndicator()),
+                const SizedBox(height: 16),
+
+                // Tarjeta del juego Memorama
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          backgroundColor: kBlue,
+                          child: const Icon(Icons.extension,
+                              size: 28, color: kInk),
+                        ),
+                        const SizedBox(width: 16),
+
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Memorama',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: kInk,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Encuentra las parejas',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Botón "Jugar"
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const MemoramaPage(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text('Jugar'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGreenPastel,
+                            foregroundColor: kInk,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
+          ),
+        ),
+      ),
     );
   }
 }
