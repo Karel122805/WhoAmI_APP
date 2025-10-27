@@ -16,6 +16,7 @@ dependencies:
 
   # --- UI / Diseño ---
   table_calendar: ^3.1.2
+  confetti: ^0.8.0
 
   # --- Firebase ---
   firebase_core: ^3.4.0
