@@ -1,9 +1,9 @@
-// lib/src/ui/screens/patients_list_page.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../services/patients_service.dart';
+import '../theme.dart';
 import 'register_patient_page.dart';
 
 class PatientsListPage extends StatefulWidget {
@@ -77,38 +77,44 @@ class _PatientsListPageState extends State<PatientsListPage> {
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         IconButton.filled(
+                          style: IconButton.styleFrom(
+                            backgroundColor: kPurple,
+                            foregroundColor: kInk,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
                           onPressed: () async {
-                            // Navegación segura: SIN genérico <bool>
                             final result = await Navigator.pushNamed(
                               context,
                               RegisterPatientPage.route,
                             );
                             if (result == true && mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Paciente agregado')),
+                              await showDialog(
+                                context: context,
+                                builder: (ctx) => _SuccessDialog(
+                                  title: 'Hecho',
+                                  message: 'Paciente agregado correctamente.',
+                                ),
                               );
-                              setState(() {}); // por si volvimos muy rápido
+                              setState(() {});
                             }
                           },
-                          icon: const Icon(Icons.add),
+                          icon: const Icon(Icons.add, size: 28),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
 
-                    // ===== Lista de pacientes del cuidador =====
+                    // ===== Lista de pacientes =====
                     Expanded(
-                      child: StreamBuilder<
-                          List<DocumentSnapshot<Map<String, dynamic>>>>(
+                      child: StreamBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
                         stream: _svc.streamPatientsOfCaregiver(caregiverId),
                         builder: (context, snap) {
                           if (snap.connectionState == ConnectionState.waiting) {
@@ -124,11 +130,9 @@ class _PatientsListPageState extends State<PatientsListPage> {
                           }
 
                           var docs = (snap.data ?? [])
-                              // solo consultantes
                               .where((d) => (d.data()?['role'] ?? '') == 'Consultante')
                               .toList();
 
-                          // ordenar por nombre
                           docs.sort((a, b) {
                             String n(DocumentSnapshot<Map<String, dynamic>> x) {
                               final m = x.data() ?? {};
@@ -138,10 +142,10 @@ class _PatientsListPageState extends State<PatientsListPage> {
                                   .toLowerCase()
                                   .trim();
                             }
+
                             return n(a).compareTo(n(b));
                           });
 
-                          // filtro por texto
                           if (q.isNotEmpty) {
                             docs = docs.where((d) {
                               final data = d.data() ?? {};
@@ -173,26 +177,9 @@ class _PatientsListPageState extends State<PatientsListPage> {
                                 name: name.isEmpty ? 'Usuario' : name,
                                 subtitle: birthday,
                                 onRemove: () async {
-                                  // Confirmación
                                   final ok = await showDialog<bool>(
                                     context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: const Text('Desvincular paciente'),
-                                      content: Text(
-                                        '¿Quitar a "$name" de tu lista?\n'
-                                        'Podrás vincularlo de nuevo después.',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(ctx, false),
-                                          child: const Text('Cancelar'),
-                                        ),
-                                        FilledButton(
-                                          onPressed: () => Navigator.pop(ctx, true),
-                                          child: const Text('Desvincular'),
-                                        ),
-                                      ],
-                                    ),
+                                    builder: (ctx) => _ConfirmRemoveDialog(name: name),
                                   );
                                   if (ok != true) return;
 
@@ -201,16 +188,24 @@ class _PatientsListPageState extends State<PatientsListPage> {
                                       caregiverId: caregiverId,
                                       patientUserId: patientId,
                                     );
+
                                     if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Se quitó a "$name".')),
+                                      await showDialog(
+                                        context: context,
+                                        builder: (ctx) => _SuccessDialog(
+                                          title: 'Hecho',
+                                          message: 'Paciente desvinculado.',
+                                        ),
                                       );
                                     }
-                                    // El stream se actualizará solo.
                                   } catch (e) {
                                     if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Error: $e')),
+                                      await showDialog(
+                                        context: context,
+                                        builder: (ctx) => _SuccessDialog(
+                                          title: 'Error',
+                                          message: e.toString(),
+                                        ),
                                       );
                                     }
                                   }
@@ -244,6 +239,86 @@ class _PatientsListPageState extends State<PatientsListPage> {
   }
 }
 
+// ===== DIALOGO DE CONFIRMACION =====
+class _ConfirmRemoveDialog extends StatelessWidget {
+  final String name;
+  const _ConfirmRemoveDialog({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFFF4EDFB),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'Desvincular paciente',
+        style: TextStyle(color: kInk, fontWeight: FontWeight.w700),
+      ),
+      content: Text(
+        '¿Quitar a "$name" de tu lista?\nPodrás vincularlo de nuevo después.',
+        style: const TextStyle(color: kInk),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(
+              color: Color(0xFF6C4FA1), // 💜 Morado fuerte exacto de la segunda imagen
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Center(
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFFB3B3), // rojo pastel
+              foregroundColor: kInk,
+              minimumSize: const Size(160, 48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Desvincular'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ===== DIALOGO DE EXITO =====
+class _SuccessDialog extends StatelessWidget {
+  final String title;
+  final String message;
+  const _SuccessDialog({required this.title, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFFF4EDFB),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(title, style: const TextStyle(color: kInk, fontWeight: FontWeight.w700)),
+      content: Text(message, style: const TextStyle(color: kInk)),
+      actions: [
+        Center(
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: kPurple,
+              foregroundColor: kInk,
+              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            ),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Aceptar'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ===== FILA DE PACIENTE =====
 class _PatientRow extends StatefulWidget {
   const _PatientRow({
     required this.name,
@@ -287,28 +362,25 @@ class _PatientRowState extends State<_PatientRow> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                Text(widget.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                 const SizedBox(height: 4),
                 if (widget.subtitle.isNotEmpty)
                   Text(widget.subtitle, style: const TextStyle(color: Colors.black54)),
               ],
             ),
           ),
-          SizedBox(
-            height: 40,
-            width: 140,
-            child: FilledButton.icon(
-              onPressed: _busy ? null : _handleRemove,
-              icon: _busy
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.link_off),
-              label: Text(_busy ? 'Quitando…' : 'Desvincular'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFFB3B3), // Rosa Figma
-                foregroundColor: Colors.black87,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              ),
+          FilledButton.icon(
+            onPressed: _busy ? null : _handleRemove,
+            icon: _busy
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.link_off),
+            label: Text(_busy ? 'Quitando…' : 'Desvincular'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(150, 44),
+              backgroundColor: const Color(0xFFFFB3B3),
+              foregroundColor: Colors.black87,
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             ),
           ),
         ],

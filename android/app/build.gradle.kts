@@ -14,38 +14,29 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        // Si usas Java 17 en tu entorno, puedes subir estas dos a VERSION_17
+        // Compatibilidad con Java 11 y soporte para desugaring
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
-        // Si cambias a Java 17, usa: jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
         applicationId = "com.example.whoami_app"
 
-        // 👇 REQUERIDO para flutter_inappwebview y WebView moderno
-        // Antes: minSdk = flutter.minSdkVersion
+        // Requerido por flutter_inappwebview y WebView moderno
         minSdk = 24
-
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
-        release {
-            // Configura tu firma release real cuando publiques
+        getByName("release") {
             signingConfig = signingConfigs.getByName("debug")
-            // Opcional: habilita minify si lo necesitas
-            // isMinifyEnabled = true
-            // proguardFiles(
-            //     getDefaultProguardFile("proguard-android-optimize.txt"),
-            //     "proguard-rules.pro"
-            // )
         }
     }
 }
@@ -55,6 +46,9 @@ flutter {
 }
 
 dependencies {
-    // Biometría
+    // Soporte biométrico
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
+    // Desugaring requerido por flutter_local_notifications
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

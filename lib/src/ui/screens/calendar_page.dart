@@ -7,6 +7,7 @@
 //   si no existe, pregunta si deseas crear uno.
 // - El contenido de la pantalla es desplazable (calendario + tarjeta del recuerdo).
 // - La tarjeta del recuerdo muestra texto, imagen (si existe), y acciones.
+// - Al guardar, se persiste la cadencia y se programan notificaciones locales.
 //
 // Dependencias: table_calendar, firebase_auth, firebase_storage,
 // cloud_firestore, image_picker, intl
@@ -22,6 +23,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 
 import '../theme.dart'; // Paleta y estilos centralizados
+import 'package:whoami_app/services/notifications_service.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -35,6 +37,9 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime? _selectedDay;
   Map<String, dynamic>? _selectedMemory;
 
+  // Cadencia por defecto para notificaciones
+  MemoryCadence _cadence = MemoryCadence.monthly;
+
   DateTime _onlyDate(DateTime d) => DateTime(d.year, d.month, d.day);
   bool _isFutureDay(DateTime day) =>
       _onlyDate(day).isAfter(_onlyDate(DateTime.now()));
@@ -46,6 +51,7 @@ class _CalendarPageState extends State<CalendarPage> {
     _focusedDay = today;
     _selectedDay = today;
     initializeDateFormatting('es_ES');
+    _loadMemory(today);
   }
 
   String _formatDateEs(DateTime d) =>
@@ -78,7 +84,7 @@ class _CalendarPageState extends State<CalendarPage> {
           children: [
             Icon(
               success ? Icons.check_circle : Icons.error_outline,
-              color: success ? kGreenPastel : Colors.red.shade400,
+              color: success ? kGreenPastel : Colors.redAccent,
             ),
             const SizedBox(width: 8),
             Text(
@@ -198,8 +204,16 @@ class _CalendarPageState extends State<CalendarPage> {
         .doc(dateId)
         .get();
 
+    final data = doc.data();
+
     setState(() {
-      _selectedMemory = doc.exists ? doc.data() : null;
+      _selectedMemory = doc.exists ? data : null;
+      // Cargar cadencia guardada si existe
+      if (data != null && data['frequency'] is String) {
+        _cadence = cadenceFromString(data['frequency'] as String);
+      } else {
+        _cadence = MemoryCadence.monthly;
+      }
     });
   }
 
@@ -258,6 +272,49 @@ class _CalendarPageState extends State<CalendarPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
+
+                // Selector de cadencia para notificaciones
+                DropdownButtonFormField<MemoryCadence>(
+                  value: _cadence,
+                  decoration: const InputDecoration(
+                    labelText: 'Frecuencia del recordatorio',
+                    hintText: 'Elige cada cuánto recordar este día',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: MemoryCadence.weekly,
+                      child: Text('Cada semana'),
+                    ),
+                    DropdownMenuItem(
+                      value: MemoryCadence.biweekly,
+                      child: Text('Cada 2 semanas'),
+                    ),
+                    DropdownMenuItem(
+                      value: MemoryCadence.monthly,
+                      child: Text('Cada mes'),
+                    ),
+                    DropdownMenuItem(
+                      value: MemoryCadence.quarterly,
+                      child: Text('Cada 3 meses'),
+                    ),
+                    DropdownMenuItem(
+                      value: MemoryCadence.semiannual,
+                      child: Text('Cada 6 meses'),
+                    ),
+                    DropdownMenuItem(
+                      value: MemoryCadence.annual,
+                      child: Text('Cada año'),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _cadence = val);
+                      setModalState(() {}); // refresca el modal
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+
                 if (selectedImage != null)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
@@ -337,6 +394,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                       await uploadTask.ref.getDownloadURL();
                                 }
 
+                                // 1) Guarda el recuerdo con la frecuencia elegida
                                 await FirebaseFirestore.instance
                                     .collection('memories')
                                     .doc(userId)
@@ -346,14 +404,30 @@ class _CalendarPageState extends State<CalendarPage> {
                                   'date': date.toIso8601String(),
                                   'text': textCtrl.text.trim(),
                                   'imageUrl': imageUrl,
+                                  'frequency': _cadence.name,
                                   'updatedAt': FieldValue.serverTimestamp(),
                                 });
+
+                                // 2) Programa notificaciones a partir de esa fecha (9:00 AM)
+                                final anchor =
+                                    DateTime(date.year, date.month, date.day, 9, 0);
+                                final titleForNotif = (textCtrl.text.trim().isNotEmpty)
+                                    ? textCtrl.text.trim()
+                                    : 'Recuerdo del ${date.day}/${date.month}/${date.year}';
+
+                                await NotificationsService.scheduleForMemory(
+                                  memoryId: dateId,
+                                  title: titleForNotif,
+                                  anchorDate: anchor,
+                                  cadence: _cadence,
+                                  occurrences: 12,
+                                );
 
                                 if (mounted) Navigator.pop(ctx);
 
                                 _showDialog(
                                   'Recuerdo guardado',
-                                  'Tu recuerdo se ha guardado correctamente.',
+                                  'Tu recuerdo se ha guardado y se programaron notificaciones.',
                                   success: true,
                                 );
 

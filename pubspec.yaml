@@ -10,8 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_localizations:           # ← ✅ agrega este paquete
-    sdk: flutter                   # ← ✅ viene del SDK de Flutter
+  flutter_localizations:
+    sdk: flutter
   cupertino_icons: ^1.0.8
 
   # --- UI / Diseño ---
@@ -45,6 +45,10 @@ dependencies:
   # --- WebView para juegos GDevelop ---
   flutter_inappwebview: ^6.0.0
 
+  # --- Notificaciones locales ---
+  flutter_local_notifications: ^17.1.2
+  timezone: ^0.9.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -55,8 +59,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/          # incluye logo.png, bot.gif, etc. dentro de /assets
-    
     - assets/
     - assets/gdevelop_game/
 

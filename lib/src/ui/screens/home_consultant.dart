@@ -2,21 +2,59 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Estilos y componentes
 import '../theme.dart';
 import 'settings_page.dart';
 import '../user_avatar.dart';
 
-// 👇 Vistas
+// Vistas
 import 'tips_page.dart';
 import 'calendar_page.dart';
-import 'game_page.dart' as games; // 🔑 evitar choques de nombres
+import 'game_page.dart' as games; // evitar choques de nombres
 import 'motivational_phrases_page.dart';
+import 'notifications_page.dart';
 
-class HomeConsultantPage extends StatelessWidget {
+// Servicios
+import 'package:whoami_app/services/memories_scheduler.dart';
+import 'package:whoami_app/services/notifications_service.dart';
+
+/// HomeConsultantPage
+/// Pantalla principal del rol "Consultante".
+class HomeConsultantPage extends StatefulWidget {
   const HomeConsultantPage({super.key, this.displayName});
   static const route = '/home/consultant';
 
   final String? displayName;
+
+  @override
+  State<HomeConsultantPage> createState() => _HomeConsultantPageState();
+}
+
+class _HomeConsultantPageState extends State<HomeConsultantPage> {
+  int _notifCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      // Programa recordatorios y luego actualiza el badge.
+      MemoriesScheduler.scheduleAllForUser(uid).whenComplete(_loadNotifCount);
+    } else {
+      _loadNotifCount();
+    }
+  }
+
+  Future<void> _loadNotifCount() async {
+    final pending = await NotificationsService.pendingNotificationRequests();
+    if (!mounted) return;
+    setState(() => _notifCount = pending.length);
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.pushNamed(context, NotificationsPage.route);
+    await _loadNotifCount();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,24 +71,35 @@ class HomeConsultantPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const SettingsPage()),
-                            );
-                          },
-                          icon: const Icon(Icons.settings, color: kInk, size: 28),
+                      // Barra superior con Ajustes (izquierda) y Notificaciones (derecha)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                                );
+                              },
+                              icon: const Icon(Icons.settings, color: kInk, size: 28),
+                              tooltip: 'Ajustes',
+                            ),
+                            _NotificationBell(
+                              count: _notifCount,
+                              onTap: _openNotifications,
+                            ),
+                          ],
                         ),
                       ),
 
-                      // 👇 Foto del usuario (o avatar por defecto)
+                      // Foto del usuario (o avatar por defecto)
                       const UserAvatar(radius: 60),
                       const SizedBox(height: 12),
 
-                      // 👇 Nombre reactivo (Firestore/Auth) con fallbacks
+                      // Nombre reactivo (Firestore/Auth) con fallbacks
                       StreamBuilder<User?>(
                         stream: FirebaseAuth.instance.userChanges(),
                         builder: (context, authSnap) {
@@ -66,11 +115,11 @@ class HomeConsultantPage extends StatelessWidget {
                             builder: (context, docSnap) {
                               String name = 'Usuario';
 
-                              // 1) Firestore first/last
+                              // 1) Firestore: firstName/lastName si existen
                               if (docSnap.hasData && docSnap.data!.data() != null) {
                                 final data = docSnap.data!.data()!;
                                 final first = (data['firstName'] as String?)?.trim() ?? '';
-                                final last  = (data['lastName']  as String?)?.trim() ?? '';
+                                final last = (data['lastName'] as String?)?.trim() ?? '';
                                 final fsName = [first, last].where((e) => e.isNotEmpty).join(' ');
                                 if (fsName.isNotEmpty) name = fsName;
                               }
@@ -87,8 +136,8 @@ class HomeConsultantPage extends StatelessWidget {
                                 if (mail.contains('@')) name = mail.split('@').first;
                               }
 
-                              // 4) fallback final al argumento
-                              name = name.isNotEmpty ? name : (displayName ?? 'Usuario');
+                              // 4) fallback final
+                              name = name.isNotEmpty ? name : (widget.displayName ?? 'Usuario');
 
                               return Text(
                                 'Bienvenido $name',
@@ -108,7 +157,7 @@ class HomeConsultantPage extends StatelessWidget {
                       const Text('Selecciona una opción', style: TextStyle(color: kGrey1)),
                       const SizedBox(height: 20),
 
-                      // >>> BOTONES
+                      // Botones principales
                       _PillButton(
                         color: kBlue,
                         icon: Icons.menu_book_outlined,
@@ -141,7 +190,7 @@ class HomeConsultantPage extends StatelessWidget {
                         icon: Icons.chat_bubble_outline,
                         text: 'ChatWhoAmI',
                         onTap: () {
-                          // TODO: Conectar a la vista de Chat
+                          // Implementar chat IA en el futuro
                         },
                       ),
                       _PillButton(
@@ -156,7 +205,7 @@ class HomeConsultantPage extends StatelessWidget {
                         },
                       ),
 
-                      const SizedBox(height: 1),
+                      const SizedBox(height: 8),
                       _PillButton(
                         color: const Color(0xFFFF9AA0),
                         icon: Icons.warning_amber_rounded,
@@ -177,7 +226,57 @@ class HomeConsultantPage extends StatelessWidget {
   }
 }
 
-// ===================== COMPONENTES =====================
+// Campanita con badge rojo para notificaciones pendientes.
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({
+    required this.count,
+    required this.onTap,
+  });
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final showBadge = count > 0;
+    final display = count > 99 ? '99+' : count.toString();
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: onTap,
+          icon: const Icon(Icons.notifications_none_rounded, color: kInk, size: 28),
+          tooltip: 'Notificaciones',
+        ),
+        if (showBadge)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              constraints: const BoxConstraints(minWidth: 20, minHeight: 18),
+              alignment: Alignment.center,
+              child: Text(
+                display,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+    }
+}
+
+// Botón reutilizable con forma de pastilla
 class _PillButton extends StatelessWidget {
   const _PillButton({
     required this.color,
@@ -213,7 +312,11 @@ class _PillButton extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 text,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: kInk),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: kInk,
+                ),
               ),
             ],
           ),
@@ -223,20 +326,20 @@ class _PillButton extends StatelessWidget {
   }
 }
 
-// Diálogo de “próximamente”
+// Diálogo simple para la opción de emergencia
 void _showComingSoonDialog(BuildContext context) {
   showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Emergencia'),
-      content: const Text('Muy pronto este botón avisará al cuidador con una notificación.'),
+      content: const Text(
+          'Muy pronto este botón avisará al cuidador con una notificación.'),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(ctx).pop(), // cierra el diálogo
+          onPressed: () => Navigator.of(ctx).pop(),
           child: const Text('Entendido'),
         ),
       ],
     ),
   );
 }
-

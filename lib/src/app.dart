@@ -33,6 +33,9 @@ import 'ui/screens/register_patient_page.dart';
 import 'ui/screens/game_page.dart';       // Solo menú de juegos (GamesPage)
 import 'ui/screens/memorama_page.dart';   // Juego del memorama (MemoramaPage)
 
+// Notificaciones
+import 'ui/screens/notifications_page.dart'; // Nueva pantalla de notificaciones
+
 /// Aplicación principal de Who Am I?
 ///
 /// Define el árbol de navegación, tema visual y localización de la app.
@@ -94,6 +97,9 @@ class WhoAmIApp extends StatelessWidget {
         // --- Juegos ---
         GamesPage.route: (_) => const GamesPage(),
         MemoramaPage.route: (_) => const MemoramaPage(),
+
+        // --- Notificaciones ---
+        NotificationsPage.route: (_) => const NotificationsPage(),
       },
     );
   }
