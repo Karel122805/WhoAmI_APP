@@ -34,9 +34,27 @@ android {
         versionName = flutter.versionName
     }
 
+    // 🔧 Configuración de los tipos de compilación
     buildTypes {
+        // --- MODO RELEASE ---
         getByName("release") {
+            // Firma temporal (usa la de debug para pruebas)
             signingConfig = signingConfigs.getByName("debug")
+
+            // ✅ Habilita ProGuard/R8 con reglas personalizadas
+            isMinifyEnabled = true
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+
+        // --- MODO DEBUG ---
+        getByName("debug") {
+            // Desactiva el shrinker para evitar errores en desarrollo
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

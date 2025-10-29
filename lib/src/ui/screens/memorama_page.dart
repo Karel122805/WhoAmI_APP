@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
-import 'package:confetti/confetti.dart'; // 🎉 confeti
+import 'package:confetti/confetti.dart';
 import '../theme.dart';
 
 const kPauseColor = Color(0xFFFF9FA3);
-const kPurpleStrong = Color(0xFF7A1FA2); // 💜 Morado fuerte
+const kPurpleStrong = Color(0xFF7A1FA2);
 
 class MemoramaPage extends StatefulWidget {
   const MemoramaPage({super.key});
@@ -46,7 +46,8 @@ class _MemoramaPageState extends State<MemoramaPage>
   Timer? _timer;
   String? _level;
 
-  // animaciones
+  final Map<String, int> _starsPerLevel = {};
+
   late final AnimationController _bannerCtrl;
   late final Animation<double> _bannerOpacity;
   late final Animation<Offset> _bannerSlide;
@@ -58,7 +59,6 @@ class _MemoramaPageState extends State<MemoramaPage>
   @override
   void initState() {
     super.initState();
-
     _bannerCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -77,7 +77,6 @@ class _MemoramaPageState extends State<MemoramaPage>
       curve: Curves.decelerate,
       reverseCurve: Curves.easeIn,
     ));
-
     _confettiCtrl = ConfettiController(duration: const Duration(seconds: 4));
   }
 
@@ -89,7 +88,51 @@ class _MemoramaPageState extends State<MemoramaPage>
     super.dispose();
   }
 
-  // ====== Navegación segura ======
+  // ====== Confirmar salida si hay partida ======
+  Future<void> _confirmExitGame() async {
+    if (!_started) {
+      _goToGamesMenuClearingGame();
+      return;
+    }
+
+    final salir = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          '¿Estás seguro que quieres salir?',
+          style: TextStyle(color: kInk, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Perderás tu partida actual.',
+          style: TextStyle(color: kInk),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            style: TextButton.styleFrom(
+              backgroundColor: kBlue,
+              foregroundColor: kInk,
+            ),
+            child: const Text('No, continuar jugando'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              backgroundColor: kPauseColor,
+              foregroundColor: kInk,
+            ),
+            child: const Text('Sí, salir'),
+          ),
+        ],
+      ),
+    );
+
+    if (salir == true) _goToGamesMenuClearingGame();
+  }
+
   void _goToGamesMenuClearingGame() {
     _timer?.cancel();
     Navigator.of(context).pushNamedAndRemoveUntil(
@@ -101,7 +144,7 @@ class _MemoramaPageState extends State<MemoramaPage>
     );
   }
 
-  // ====== Niveles ======
+  // ====== Configuración de niveles ======
   int get _gridSize {
     switch (_level) {
       case 'Medio':
@@ -147,8 +190,7 @@ class _MemoramaPageState extends State<MemoramaPage>
     _paused = false;
     _started = true;
 
-    _showLevelBanner('🌟 Nivel $_level iniciado');
-
+    _showLevelBanner('Nivel $_level iniciado');
     _timer?.cancel();
     _startTimer();
     setState(() {});
@@ -185,7 +227,6 @@ class _MemoramaPageState extends State<MemoramaPage>
     }
 
     _moves++;
-
     if (_cards[_firstIndex!] != _cards[index]) {
       _waiting = true;
       await Future.delayed(const Duration(milliseconds: 600));
@@ -211,7 +252,7 @@ class _MemoramaPageState extends State<MemoramaPage>
     }
   }
 
-  // ====== Diálogos ======
+  // ====== Diálogo de pausa ======
   void _showPauseDialog() {
     showDialog(
       context: context,
@@ -250,6 +291,7 @@ class _MemoramaPageState extends State<MemoramaPage>
     );
   }
 
+  // ====== Cálculo de estrellas ======
   int _computeStars() {
     if (_level == 'Fácil') {
       if (_seconds <= 25 && _moves <= 10) return 3;
@@ -267,57 +309,52 @@ class _MemoramaPageState extends State<MemoramaPage>
     return 0;
   }
 
+  // ====== Nivel completado ======
   void _showWinDialog() {
     final stars = _computeStars();
+    _starsPerLevel[_level ?? ''] = stars;
+
+    String? nextLevel;
+    if (_level == 'Fácil') nextLevel = 'Medio';
+    else if (_level == 'Medio') nextLevel = 'Difícil';
+
+    if (nextLevel == null) {
+      _showFinalAverageDialog();
+      return;
+    }
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          '¡Felicidades!',
-          style: TextStyle(
-            color: kInk,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
-        ),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Nivel completado',
+            style:
+                TextStyle(color: kInk, fontWeight: FontWeight.bold, fontSize: 20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Completaste el nivel $_level en $_moves movimientos y ${_seconds}s.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: kInk, fontSize: 15),
+              style: const TextStyle(color: kInk),
             ),
             const SizedBox(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
                 3,
-                (i) => Icon(
-                  Icons.star_rounded,
-                  size: 34,
-                  color: i < stars ? Colors.amber : Colors.grey[300],
-                ),
+                (i) => Icon(Icons.star_rounded,
+                    size: 34, color: i < stars ? Colors.amber : Colors.grey[300]),
               ),
             ),
-            const SizedBox(height: 18),
-            Text(
-              stars == 3
-                  ? '¡Perfecto! Cumpliste todas las misiones.'
-                  : stars == 2
-                      ? '¡Muy bien! Cumpliste dos misiones.'
-                      : stars == 1
-                          ? '¡Bien hecho! Lograste una misión.'
-                          : '¡Sigue intentando para ganar estrellas!',
+            const SizedBox(height: 16),
+            const Text(
+              '¿Quieres jugar de nuevo este nivel?',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: stars == 3 ? Colors.amber : kInk,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: kInk, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -332,76 +369,180 @@ class _MemoramaPageState extends State<MemoramaPage>
               backgroundColor: kPurple,
               foregroundColor: kInk,
             ),
-            child: const Text('Jugar otra vez'),
+            child: const Text('Sí, jugar de nuevo'),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _showNextLevelDialog();
-            },
-            child: const Text(
-              'Cerrar',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: kPurpleStrong,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showNextLevelDialog() {
-    String? nextLevel;
-    if (_level == 'Fácil') nextLevel = 'Medio';
-    else if (_level == 'Medio') nextLevel = 'Difícil';
-
-    if (nextLevel == null) {
-      _showGameCompletedCelebration();
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          '¿Quieres pasar al siguiente nivel?',
-          style: TextStyle(color: kInk, fontWeight: FontWeight.bold),
-        ),
-        content: Text('Tu siguiente nivel es: $nextLevel',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: kInk)),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               setState(() => _level = nextLevel);
               _startGame();
             },
-            style: TextButton.styleFrom(
-              backgroundColor: kBlue,
-              foregroundColor: kInk,
-            ),
-            child: const Text(
-              'Sí, continuar',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: kInk,
-              ),
-            ),
+            child: const Text('Continuar al siguiente nivel',
+                style:
+                    TextStyle(color: kPurpleStrong, fontWeight: FontWeight.bold)),
           ),
           TextButton(
-            onPressed: _goToGamesMenuClearingGame,
-            child: const Text(
-              'No, volver al menú',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: kPurpleStrong,
+            onPressed: () {
+              Navigator.pop(context);
+              _goToGamesMenuClearingGame();
+            },
+            child: const Text('Salir al menú', style: TextStyle(color: kInk)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ====== Promedio final ======
+  void _showFinalAverageDialog() {
+    _confettiCtrl.play();
+
+    final totalStars = _starsPerLevel.values.fold<int>(0, (a, b) => a + b);
+    final avg = totalStars / _starsPerLevel.length;
+    final fullStars = avg.floor();
+    final hasHalf = avg - fullStars >= 0.5;
+
+    String feedback;
+    if (avg >= 2.5) {
+      feedback = 'Excelente desempeño, has logrado dominar el juego.';
+    } else if (avg >= 1.5) {
+      feedback = 'Buen trabajo, tu memoria está mejorando.';
+    } else {
+      feedback = 'Sigue practicando, puedes hacerlo mejor.';
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Stack(
+        children: [
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiCtrl,
+              blastDirectionality: BlastDirectionality.explosive,
+              emissionFrequency: 0.08,
+              numberOfParticles: 14,
+              maxBlastForce: 25,
+              minBlastForce: 10,
+              gravity: 0.25,
+              shouldLoop: true,
+              colors: const [kPurple, kBlue, Colors.amber, Colors.white],
+            ),
+          ),
+          Center(
+            child: Container(
+              width: 330,
+              padding: const EdgeInsets.all(26),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: kBlue, width: 2),
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Has completado los tres niveles',
+                    style: TextStyle(
+                      color: kInk,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Estrellas por nivel
+                  Column(
+                    children: _starsPerLevel.entries.map((entry) {
+                      final stars = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${entry.key}: ',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: kInk,
+                              ),
+                            ),
+                            Row(
+                              children: List.generate(
+                                3,
+                                (i) => Icon(
+                                  Icons.star_rounded,
+                                  color: i < stars
+                                      ? Colors.amber
+                                      : Colors.grey[300],
+                                  size: 28,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(thickness: 1, color: Colors.black12),
+                  const SizedBox(height: 8),
+
+                  const Text(
+                    'Estrellas finales',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: kInk),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (int i = 0; i < fullStars; i++)
+                        const Icon(Icons.star_rounded,
+                            color: Colors.amber, size: 34),
+                      if (hasHalf)
+                        const Icon(Icons.star_half_rounded,
+                            color: Colors.amber, size: 34),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+                  Text(
+                    feedback,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: kInk,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15),
+                  ),
+                  const SizedBox(height: 25),
+                  TextButton(
+                    onPressed: () {
+                      _confettiCtrl.stop();
+                      _goToGamesMenuClearingGame();
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: kPurple,
+                      foregroundColor: kInk,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: const Text(
+                      'Volver al menú de juegos',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -410,123 +551,7 @@ class _MemoramaPageState extends State<MemoramaPage>
     );
   }
 
- Future<void> _showGameCompletedCelebration() async {
-  _confettiCtrl.play();
-
-  await showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => Stack(
-      children: [
-        Align(
-          alignment: Alignment.topCenter,
-          child: ConfettiWidget(
-            confettiController: _confettiCtrl,
-            blastDirectionality: BlastDirectionality.explosive,
-            emissionFrequency: 0.08,
-            numberOfParticles: 14,
-            maxBlastForce: 25,
-            minBlastForce: 10,
-            gravity: 0.25,
-            shouldLoop: true,
-            colors: const [kPurple, kBlue, Colors.amber, Colors.white],
-          ),
-        ),
-        Center(
-          child: Container(
-            width: 330,
-            padding: const EdgeInsets.all(26),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: kBlue, width: 2),
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  '🎉 ¡Felicidades!',
-                  style: TextStyle(
-                    color: kInk,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  '¡Has completado los 3 niveles del Memorama!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: kInk,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 20,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.star_rounded, color: Colors.amber, size: 36),
-                    SizedBox(width: 8),
-                    Icon(Icons.star_rounded, color: Colors.amber, size: 36),
-                    SizedBox(width: 8),
-                    Icon(Icons.star_rounded, color: Colors.amber, size: 36),
-                  ],
-                ),
-                const SizedBox(height: 25),
-                TextButton(
-                  onPressed: () {
-                    _confettiCtrl.stop();
-                    _goToGamesMenuClearingGame();
-                  },
-                  style: TextButton.styleFrom(
-                    backgroundColor: kPurple,
-                    foregroundColor: kInk,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20)),
-                  ),
-                  child: const Text(
-                    'Volver al menú de juegos',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextButton(
-                  onPressed: () {
-                    _confettiCtrl.stop();
-                    Navigator.pop(context);
-                    setState(() => _level = 'Fácil');
-                    _startGame();
-                  },
-                  child: const Text(
-                    'Jugar desde el principio',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: kPurpleStrong, // 💜 morado fuerte
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-
-  // ====== Banner “Nivel X iniciado” ======
+  // ====== Banner ======
   Future<void> _showLevelBanner(String text) async {
     setState(() {
       _bannerText = text;
@@ -546,7 +571,7 @@ class _MemoramaPageState extends State<MemoramaPage>
     return Scaffold(
       appBar: AppBar(
         leading:
-            IconButton(icon: const Icon(Icons.arrow_back), onPressed: _goToGamesMenuClearingGame),
+            IconButton(icon: const Icon(Icons.arrow_back), onPressed: _confirmExitGame),
         title: const Text('Memorama'),
         backgroundColor: Colors.white,
         foregroundColor: kInk,
@@ -555,9 +580,7 @@ class _MemoramaPageState extends State<MemoramaPage>
       body: Stack(
         alignment: Alignment.center,
         children: [
-          SafeArea(
-            child: !_started ? _buildMenuInicio() : _buildGameUI(),
-          ),
+          SafeArea(child: !_started ? _buildMenuInicio() : _buildGameUI()),
           if (_showBanner)
             FadeTransition(
               opacity: _bannerOpacity,
@@ -574,9 +597,7 @@ class _MemoramaPageState extends State<MemoramaPage>
                   child: Text(
                     _bannerText,
                     style: const TextStyle(
-                      color: kInk,
-                      fontWeight: FontWeight.bold,
-                    ),
+                        color: kInk, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -599,19 +620,17 @@ class _MemoramaPageState extends State<MemoramaPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              '🧠 Comienza tu juego',
-              style: TextStyle(
-                  color: kInk, fontWeight: FontWeight.bold, fontSize: 18),
-            ),
+            const Text('Comienza tu juego',
+                style:
+                    TextStyle(color: kInk, fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 20),
             DropdownButtonFormField<String>(
               value: _level,
               decoration: InputDecoration(
                 labelText: 'Selecciona el nivel',
                 labelStyle: const TextStyle(color: kInk),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
               items: const [
                 DropdownMenuItem(value: 'Fácil', child: Text('Fácil')),
@@ -635,103 +654,124 @@ class _MemoramaPageState extends State<MemoramaPage>
     );
   }
 
+  // ====== Cartas responsivas ======
   Widget _buildGameUI() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossCount = _gridSize;
+        final spacing = 8.0;
+        final totalSpacing = spacing * (crossCount + 1);
+        final availableWidth = constraints.maxWidth - totalSpacing;
+        final cardSize = availableWidth / crossCount;
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Movimientos: $_moves',
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Movimientos: $_moves',
+                            style: const TextStyle(
+                                color: kInk, fontWeight: FontWeight.w600)),
+                        Text('Pares: $_score',
+                            style: const TextStyle(
+                                color: kInk, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    Text(_formatTime(),
                         style: const TextStyle(
-                            color: kInk, fontWeight: FontWeight.w600)),
-                    Text('Pares: $_score',
-                        style: const TextStyle(
-                            color: kInk, fontWeight: FontWeight.w600)),
+                            fontWeight: FontWeight.w600, color: kInk)),
                   ],
                 ),
-                Text(_formatTime(),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: kInk)),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: GridView.builder(
-              itemCount: _cards.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _gridSize,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
               ),
-              itemBuilder: (_, i) {
-                final isUp = _revealed[i];
-                final icon = _icons[_cards[i] % _icons.length];
-                return InkWell(
-                  onTap: () => _onCardTap(i),
-                  borderRadius: BorderRadius.circular(12),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    decoration: BoxDecoration(
-                      color: isUp ? kBlue.withOpacity(0.9) : Colors.grey[300],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: isUp ? kPurple : Colors.black26, width: 2),
-                    ),
-                    child: Center(
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 200),
-                        opacity: isUp ? 1 : 0,
-                        child: Icon(icon, size: 38, color: kInk),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: GridView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: _cards.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossCount,
+                    crossAxisSpacing: spacing,
+                    mainAxisSpacing: spacing,
+                    childAspectRatio: 1,
+                  ),
+                  itemBuilder: (_, i) {
+                    final isUp = _revealed[i];
+                    final icon = _icons[_cards[i] % _icons.length];
+                    return SizedBox.square(
+                      dimension: cardSize,
+                      child: InkWell(
+                        onTap: () => _onCardTap(i),
+                        borderRadius: BorderRadius.circular(12),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            color: isUp
+                                ? kBlue.withOpacity(0.9)
+                                : Colors.grey[300],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color:
+                                    isUp ? kPurple : Colors.black26, width: 2),
+                          ),
+                          child: Center(
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              opacity: isUp ? 1 : 0,
+                              child: Icon(icon,
+                                  size: cardSize * 0.45, color: kInk),
+                            ),
+                          ),
+                        ),
                       ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: _resetGame,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPurple,
+                      foregroundColor: kInk,
+                      minimumSize: const Size(140, 48),
+                    ),
+                    child: const Text('Reiniciar'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _pauseGame,
+                    icon: const Icon(Icons.pause),
+                    label: const Text('Pausa'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPauseColor,
+                      foregroundColor: kInk,
+                      minimumSize: const Size(140, 48),
                     ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ElevatedButton(
-                onPressed: _resetGame,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPurple,
-                  foregroundColor: kInk,
-                  minimumSize: const Size(140, 48),
-                ),
-                child: const Text('Reiniciar'),
-              ),
-              ElevatedButton.icon(
-                onPressed: _pauseGame,
-                icon: const Icon(Icons.pause),
-                label: const Text('Pausa'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPauseColor,
-                  foregroundColor: kInk,
-                  minimumSize: const Size(140, 48),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 

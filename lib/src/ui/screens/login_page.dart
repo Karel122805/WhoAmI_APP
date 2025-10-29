@@ -1,5 +1,4 @@
-// lib/src/ui/screens/login_page.dart
-import 'dart:async'; // Timer para cuenta regresiva y pulso
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,9 +9,7 @@ import '../brand_logo.dart';
 import '../theme.dart';
 import 'home_caregiver.dart';
 import 'home_consultant.dart';
-
-import 'package:whoami_app/services/biometric_auth_service.dart';
-import 'package:whoami_app/src/ui/screens/lock_screen.dart';
+import 'choice_start.dart'; // 👈 agregado para volver al inicio si no hay stack
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -24,41 +21,30 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _email = TextEditingController();
-  final _pass  = TextEditingController();
+  final _pass = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
+  bool _obscurePass = true;
 
-  // ⏱️ Cooldown persistente: verificación de correo
-  static const String _kLastVerificationTsKey = 'last_verification_email_at';
-  static const Duration _verificationCooldown = Duration(seconds: 60);
-  DateTime? _lastVerificationEmailAt;
-
-  // ⏱️ Cooldown persistente: reset de contraseña
   static const String _kLastResetTsKey = 'last_reset_email_at';
   static const Duration _resetCooldown = Duration(seconds: 60);
   DateTime? _lastResetEmailAt;
 
-  // ⏱️ Cuenta regresiva visible para reset
   Timer? _resetTimer;
   int _resetSecondsLeft = 0;
-
-  // ✨ Pulso visual cuando quedan ≤10s
-  static const int _pulseThreshold = 10;
   Timer? _pulseTimer;
   bool _pulseUp = false;
+  static const int _pulseThreshold = 10;
 
-  // 🚨 Estado de error en contraseña + shake
-  final GlobalKey<_ShakeWidgetState> _passShakeKey = GlobalKey<_ShakeWidgetState>();
+  final GlobalKey<_ShakeWidgetState> _passShakeKey =
+      GlobalKey<_ShakeWidgetState>();
   bool _passwordError = false;
   String? _passwordErrorText;
 
   @override
   void initState() {
     super.initState();
-    _loadCooldowns().then((_) {
-      _startResetCountdownIfNeeded();
-    });
-    _maybeShowLock();
+    _loadCooldowns().then((_) => _startResetCountdownIfNeeded());
   }
 
   @override
@@ -68,55 +54,12 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // ========= PERFIL: asegurar users/{uid} normalizado =========
-  Future<void> _ensureUserProfile(User user) async {
-    final db = FirebaseFirestore.instance;
-    final ref = db.collection('users').doc(user.uid);
-    final snap = await ref.get();
-    final m = snap.data() ?? <String, dynamic>{};
-
-    // Preferir lo que ya haya en Firestore, si no caer a Auth
-    final firstName = ((m['firstName'] ?? '') as String).trim();
-    final lastName  = ((m['lastName']  ?? '') as String).trim();
-
-    String display = ((m['displayName'] ?? '') as String).trim();
-    if (display.isEmpty) {
-      if (firstName.isNotEmpty || lastName.isNotEmpty) {
-        display = '$firstName $lastName'.trim();
-      } else {
-        display = (user.displayName ?? user.email?.split('@').first ?? 'Usuario').trim();
-      }
-    }
-
-    final payload = <String, dynamic>{
-      'email'            : (user.email ?? '').toLowerCase(),
-      'firstName'        : firstName,
-      'lastName'         : lastName,
-      'displayName'      : display,
-      'displayNameLower' : display.toLowerCase(),
-      'role'             : (m['role'] ?? ''), // no lo sobreescribimos aquí
-      'archived'         : (m['archived'] ?? false) == true ? true : false,
-      'caregiverId'      : m.containsKey('caregiverId') ? m['caregiverId'] : null,
-      'updatedAt'        : FieldValue.serverTimestamp(),
-      if (!snap.exists) 'createdAt': FieldValue.serverTimestamp(),
-    };
-
-    await ref.set(payload, SetOptions(merge: true));
-  }
-  // ============================================================
-
   Future<void> _loadCooldowns() async {
     final prefs = await SharedPreferences.getInstance();
-    final verMs = prefs.getInt(_kLastVerificationTsKey);
     final resMs = prefs.getInt(_kLastResetTsKey);
-    if (verMs != null) _lastVerificationEmailAt = DateTime.fromMillisecondsSinceEpoch(verMs);
-    if (resMs != null) _lastResetEmailAt = DateTime.fromMillisecondsSinceEpoch(resMs);
-  }
-
-  Future<void> _saveVerificationTs(DateTime when) async {
-    _lastVerificationEmailAt = when;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kLastVerificationTsKey, when.millisecondsSinceEpoch);
+    if (resMs != null) {
+      _lastResetEmailAt = DateTime.fromMillisecondsSinceEpoch(resMs);
+    }
   }
 
   Future<void> _saveResetTs(DateTime when) async {
@@ -179,70 +122,38 @@ class _LoginPageState extends State<LoginPage> {
     _pulseUp = false;
   }
 
-  // ⛳️ Si hay sesión + AppLock, pedimos huella/cara y redirigimos directo al Home según rol.
-  Future<void> _maybeShowLock() async {
-    final current = FirebaseAuth.instance.currentUser;
-    if (current == null) return;
+  Future<void> _ensureUserProfile(User user) async {
+    final db = FirebaseFirestore.instance;
+    final ref = db.collection('users').doc(user.uid);
+    final snap = await ref.get();
+    final m = snap.data() ?? <String, dynamic>{};
 
-    final enabled = await BiometricAuthService.instance.getAppLockEnabled();
-    if (!enabled || !mounted) return;
+    final firstName = ((m['firstName'] ?? '') as String).trim();
+    final lastName = ((m['lastName'] ?? '') as String).trim();
 
-    final ok = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const LockScreen()),
-    );
-
-    if (ok != true) return;
-
-    try {
-      // 🔒 Asegurar perfil antes de leer rol
-      await _ensureUserProfile(current);
-
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(current.uid)
-          .get();
-
-      final data = snap.data() ?? {};
-      final role = (data['role'] as String?)?.trim();
-
-      final firstName = (data['firstName'] as String?)?.trim();
-      final lastName  = (data['lastName'] as String?)?.trim();
-      final displayFromFs =
-          [firstName, lastName].where((e) => (e ?? '').isNotEmpty).join(' ');
-      final name = displayFromFs.isNotEmpty
-          ? displayFromFs
-          : (current.displayName ?? current.email?.split('@').first ?? 'Usuario');
-
-      if (!mounted) return;
-
-      if (role == 'Cuidador') {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          HomeCaregiverPage.route,
-          (_) => false,
-          arguments: {'name': name},
-        );
-      } else if (role == 'Consultante') {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          HomeConsultantPage.route,
-          (_) => false,
-          arguments: {'name': name},
-        );
+    String display = ((m['displayName'] ?? '') as String).trim();
+    if (display.isEmpty) {
+      if (firstName.isNotEmpty || lastName.isNotEmpty) {
+        display = '$firstName $lastName'.trim();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tu cuenta no tiene rol asignado.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        display =
+            (user.displayName ?? user.email?.split('@').first ?? 'Usuario')
+                .trim();
       }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al redirigir: $e'), backgroundColor: Colors.red),
-      );
     }
+
+    final payload = <String, dynamic>{
+      'email': (user.email ?? '').toLowerCase(),
+      'firstName': firstName,
+      'lastName': lastName,
+      'displayName': display,
+      'displayNameLower': display.toLowerCase(),
+      'role': (m['role'] ?? ''),
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (!snap.exists) 'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    await ref.set(payload, SetOptions(merge: true));
   }
 
   String? _emailRule(String? v) {
@@ -254,86 +165,15 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showErrorSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          msg,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  String _authErrorMessage(FirebaseAuthException e) {
-    final code = (e.code).toLowerCase();
-
-    const unified = {
-      'wrong-password',
-      'user-not-found',
-      'invalid-credential',
-      'invalid-login-credentials',
-    };
-
-    if (unified.contains(code)) {
-      return 'Correo o contraseña incorrecta.';
-    }
-
-    switch (code) {
-      case 'invalid-email':
-        return 'Correo inválido.';
-      case 'too-many-requests':
-        return 'Demasiados intentos. Espera un momento y vuelve a intentar.';
-      case 'user-disabled':
-        return 'La cuenta ha sido deshabilitada.';
-      default:
-        return 'No se pudo iniciar sesión. ($code)';
-    }
-  }
-
-  // =========================
-  // Recuperación (con AlertDialog)
-  // =========================
-  Future<String?> _promptEmailForReset() async {
-    final controller = TextEditingController(text: _email.text.trim());
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Recuperar contraseña'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-            labelText: 'Correo electrónico',
-            hintText: 'tucorreo@ejemplo.com',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-            onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: pillLav(),
-            onPressed: () {
-              final value = controller.text.trim().toLowerCase();
-              Navigator.pop(ctx, value.isEmpty ? null : value);
-            },
-            child: const Text('Enviar enlace'),
-          ),
-        ],
-      ),
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
     );
   }
 
   Future<void> _sendPasswordReset() async {
     String email = _email.text.trim().toLowerCase();
-
     if (email.isEmpty) {
-      final typed = await _promptEmailForReset();
-      if (typed == null) return;
-      email = typed.trim().toLowerCase();
+      _showErrorSnack('Escribe tu correo para recuperar tu contraseña.');
+      return;
     }
 
     final now = DateTime.now();
@@ -343,15 +183,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!canSend) {
       final remaining = _resetCooldown - now.difference(_lastResetEmailAt!);
       final secondsLeft = remaining.isNegative ? 0 : remaining.inSeconds;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Ya enviamos un enlace recientemente. Intenta de nuevo en ~${secondsLeft}s.',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnack('Intenta de nuevo en ~${secondsLeft}s.');
       _startResetCountdownIfNeeded();
       return;
     }
@@ -361,58 +193,14 @@ class _LoginPageState extends State<LoginPage> {
       await _saveResetTs(now);
       _startResetCountdownIfNeeded();
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Enlace enviado a $email',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
+          content: Text('Enlace enviado a $email'),
           backgroundColor: Colors.green,
         ),
       );
-
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Revisa tu correo'),
-          content: Text(
-            'Te enviamos un enlace para restablecer tu contraseña a:\n\n$email\n\n'
-            'Si no lo ves en tu bandeja de entrada, revisa también la carpeta de SPAM o Correo no deseado.',
-          ),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Ok'),
-            ),
-          ],
-        ),
-      );
-
-    } on FirebaseAuthException catch (e) {
-      String msg = 'No se pudo enviar el correo de recuperación.';
-      if (e.code == 'invalid-email') msg = 'El correo no es válido.';
-      if (e.code == 'user-not-found') msg = 'No existe una cuenta con ese correo.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            msg,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error: $e',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnack('No se pudo enviar el correo: $e');
     }
   }
 
@@ -432,103 +220,18 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       final user = FirebaseAuth.instance.currentUser!;
-      // 🔒 Verificación
-      if (!user.emailVerified) {
-        final now = DateTime.now();
-        final canResend = _lastVerificationEmailAt == null ||
-            now.difference(_lastVerificationEmailAt!) >= _verificationCooldown;
-
-        if (canResend) {
-          try {
-            await user.sendEmailVerification();
-            await _saveVerificationTs(now);
-          } on FirebaseAuthException catch (e) {
-            if (e.code != 'too-many-requests') {}
-          }
-        }
-
-        await FirebaseAuth.instance.signOut();
-        if (!mounted) return;
-
-        final remaining = _lastVerificationEmailAt == null
-            ? Duration.zero
-            : _verificationCooldown - DateTime.now().difference(_lastVerificationEmailAt!);
-        final secondsLeft = remaining.isNegative ? 0 : remaining.inSeconds;
-        final extra =
-            canResend ? '' : '\n\nPuedes solicitar otro envío en ~${secondsLeft}s.';
-
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Verifica tu correo'),
-            content: Text(
-              'Tu cuenta aún no está verificada.\n\n'
-              '${canResend ? 'Hemos enviado (o reenviado) el enlace a:' : 'Ya enviamos un enlace recientemente a:'}\n'
-              '${_email.text.trim().toLowerCase()}\n\n'
-              'Abre ese correo y confirma para poder iniciar sesión. '
-              'Si no lo ves, revisa SPAM.$extra',
-            ),
-            actions: [
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Entendido'),
-              ),
-            ],
-          ),
-        );
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              canResend
-                  ? 'Te enviamos el enlace de verificación. Revisa tu correo.'
-                  : 'Ya enviamos un enlace recientemente. Intenta de nuevo en ~${secondsLeft}s.',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-
-        setState(() => _loading = false);
-        return; // 🚫 no continúa al Home
-      }
-
-      // 🧾 Asegurar/normalizar perfil en users/{uid}
       await _ensureUserProfile(user);
 
-      // ======= Biometría / PIN =======
-      final supported = await BiometricAuthService.instance.canCheckBiometrics();
-      if (supported) {
-        final enableQuick = await _askEnableQuickUnlock(context);
-        await BiometricAuthService.instance.setBiometricEnabled(enableQuick);
-
-        if (enableQuick) {
-          final lockOn = await _askLockOnLaunch(context);
-          await BiometricAuthService.instance.setAppLockEnabled(lockOn);
-        } else {
-          await BiometricAuthService.instance.setAppLockEnabled(false);
-        }
-      } else {
-        await BiometricAuthService.instance.setBiometricEnabled(false);
-        await BiometricAuthService.instance.setAppLockEnabled(false);
-      }
-
-      // Rol desde Firestore
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
-
       final data = snap.data() ?? {};
       final role = (data['role'] as String?)?.trim();
-
-      final firstName = (data['firstName'] as String?)?.trim();
-      final lastName  = (data['lastName'] as String?)?.trim();
-      final displayFromFs =
-          [firstName, lastName].where((e) => (e ?? '').isNotEmpty).join(' ');
-      final name = displayFromFs.isNotEmpty
-          ? displayFromFs
-          : (user.displayName ?? user.email?.split('@').first ?? 'Usuario');
+      final name =
+          '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'.trim().isEmpty
+              ? (user.email?.split('@').first ?? 'Usuario')
+              : '${data['firstName']} ${data['lastName']}';
 
       if (!mounted) return;
 
@@ -547,236 +250,153 @@ class _LoginPageState extends State<LoginPage> {
           arguments: {'name': name},
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Tu cuenta no tiene rol asignado.',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showErrorSnack('Tu cuenta no tiene rol asignado.');
       }
-    } on FirebaseAuthException catch (e) {
-      final msg = _authErrorMessage(e);
-      _showErrorSnack(msg);
+    } on FirebaseAuthException {
+      _showErrorSnack('Correo o contraseña incorrecta.');
       setState(() {
         _passwordError = true;
-        _passwordErrorText = (msg == 'Correo o contraseña incorrecta.') ? msg : _passwordErrorText;
+        _passwordErrorText = 'Correo o contraseña incorrecta.';
       });
       _pass.clear();
       _passShakeKey.currentState?.shake();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error: $e',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<bool> _askEnableQuickUnlock(BuildContext context) async {
-    final agree = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Activar inicio rápido'),
-        content: const Text(
-          'Podrás entrar con huella, rostro o PIN del dispositivo. '
-          'Si falla, siempre podrás usar tu contraseña.',
-        ),
-        actions: [
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Después'),
-          ),
-          FilledButton(
-            style: pillLav(),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Activar'),
-          ),
-        ],
-      ),
-    );
-    return agree ?? false;
-  }
-
-  Future<bool> _askLockOnLaunch(BuildContext context) async {
-    final ans = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Bloquear al abrir'),
-        content: const Text(
-          '¿Quieres que la app pida huella/rostro cada que la abras (si tu sesión sigue activa)?',
-        ),
-        actions: [
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFF6A1B9A)),
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('No'),
-          ),
-          FilledButton(
-            style: pillLav(),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sí'),
-          ),
-        ],
-      ),
-    );
-    return ans ?? false;
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Etiqueta dinámica del botón de reset
     final resetLabel = _resetSecondsLeft > 0
         ? '¿Olvidaste tu contraseña? (${_resetSecondsLeft}s)'
         : '¿Olvidaste tu contraseña?';
 
-    // Escala de pulso (1.0 -> 1.06) si quedan ≤10s
-    final pulseScale = (_resetSecondsLeft > 0 && _resetSecondsLeft <= _pulseThreshold && _pulseUp)
+    final pulseScale = (_resetSecondsLeft > 0 &&
+            _resetSecondsLeft <= _pulseThreshold &&
+            _pulseUp)
         ? 1.06
         : 1.0;
 
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
-      child: WillPopScope(
-        onWillPop: () async {
-          Navigator.pushNamedAndRemoveUntil(context, '/auth/choice', (route) => false);
-          return false;
-        },
-        child: Scaffold(
-          body: SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 56,
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  left: 0, top: 8,
-                                  child: IconButton.filled(
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: const Color(0xFFEAEAEA),
-                                      shape: const CircleBorder(),
-                                      fixedSize: const Size(40, 40),
-                                    ),
-                                    onPressed: () {
-                                      FocusScope.of(context).unfocus();
-                                      Navigator.pushNamedAndRemoveUntil(
-                                        context,
-                                        '/auth/choice',
-                                        (_) => false,
-                                      );
-                                    },
-                                    icon: const Icon(Icons.arrow_back, color: kInk),
-                                  ),
-                                ),
-                                const Center(
-                                  child: Text(
-                                    'Iniciar sesión',
-                                    style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w700,
-                                      color: kInk,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const Align(child: BrandLogo(size: 170)),
-                          const SizedBox(height: 22),
-
-                          const _FieldLabel('Correo electrónico'),
-                          const SizedBox(height: 6),
-                          _FieldBox(
-                            controller: _email,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            validator: _emailRule,
-                          ),
-
-                          const SizedBox(height: 14),
-                          const _FieldLabel('Contraseña'),
-                          const SizedBox(height: 6),
-
-                          // 🔥 Campo de contraseña con sacudida y error en rojo
-                          ShakeWidget(
-                            key: _passShakeKey,
-                            child: _FieldBox(
-                              controller: _pass,
-                              obscure: true,
-                              textInputAction: TextInputAction.done,
-                              validator: (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
-                              errorText: _passwordError ? (_passwordErrorText ?? 'Correo o contraseña incorrecta.') : null,
-                              onChanged: (_) {
-                                if (_passwordError) {
-                                  setState(() {
-                                    _passwordError = false;
-                                    _passwordErrorText = null;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: AnimatedScale(
-                              scale: pulseScale,
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                              child: TextButton(
-                                style: TextButton.styleFrom(
-                                  foregroundColor: const Color(0xFF6A1B9A),
-                                ),
-                                onPressed: _resetSecondsLeft > 0 ? null : _sendPasswordReset,
-                                child: Text(resetLabel),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-
-                          Align(
-                            child: SizedBox(
-                              width: 296, height: 56,
-                              child: FilledButton(
-                                style: pillLav(),
-                                onPressed: _loading ? null : _submit,
-                                child: _loading
-                                    ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(),
-                                      )
-                                    : const Text('Entrar'),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                        ],
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: kInk),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushNamedAndRemoveUntil(
+                  context, ChoiceStart.route, (_) => false);
+            }
+          },
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 8),
+                    const Center(
+                      child: Text(
+                        'Iniciar sesión',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: kInk,
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 24),
+                    const Align(child: BrandLogo(size: 170)),
+                    const SizedBox(height: 22),
+                    const _FieldLabel('Correo electrónico'),
+                    const SizedBox(height: 6),
+                    _FieldBox(
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      validator: _emailRule,
+                    ),
+                    const SizedBox(height: 14),
+                    const _FieldLabel('Contraseña'),
+                    const SizedBox(height: 6),
+                    ShakeWidget(
+                      key: _passShakeKey,
+                      child: TextFormField(
+                        controller: _pass,
+                        obscureText: _obscurePass,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'Requerido' : null,
+                        onChanged: (_) {
+                          if (_passwordError) {
+                            setState(() {
+                              _passwordError = false;
+                              _passwordErrorText = null;
+                            });
+                          }
+                        },
+                        decoration: InputDecoration(
+                          errorText: _passwordError ? _passwordErrorText : null,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePass
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              color: Colors.grey[700],
+                            ),
+                            onPressed: () {
+                              setState(() => _obscurePass = !_obscurePass);
+                            },
+                          ),
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: AnimatedScale(
+                        scale: pulseScale,
+                        duration: const Duration(milliseconds: 300),
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF6A1B9A)),
+                          onPressed: _resetSecondsLeft > 0
+                              ? null
+                              : _sendPasswordReset,
+                          child: Text(resetLabel),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Align(
+                      child: SizedBox(
+                        width: 296,
+                        height: 56,
+                        child: FilledButton(
+                          style: pillLav(),
+                          onPressed: _loading ? null : _submit,
+                          child: _loading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(),
+                                )
+                              : const Text('Entrar'),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -797,7 +417,6 @@ class _FieldLabel extends StatelessWidget {
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: kInk,
-          height: 1.2,
         ),
       );
 }
@@ -805,64 +424,45 @@ class _FieldLabel extends StatelessWidget {
 class _FieldBox extends StatelessWidget {
   const _FieldBox({
     required this.controller,
-    this.obscure = false,
     this.textInputAction = TextInputAction.next,
     this.validator,
     this.keyboardType,
-    this.errorText,
-    this.onChanged,
   });
-
   final TextEditingController controller;
-  final bool obscure;
   final TextInputAction textInputAction;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
-
-  // 🔴 soporte de error visual en el propio campo
-  final String? errorText;
-
-  // 🧹 para limpiar el error mientras escribe
-  final void Function(String)? onChanged;
-
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
-      obscureText: obscure,
       textInputAction: textInputAction,
       keyboardType: keyboardType,
-      autocorrect: false,
-      enableSuggestions: !obscure,
       validator: validator,
-      onChanged: onChanged,
-      decoration: const InputDecoration(
-        hintText: '',
-      ).copyWith(
-        errorText: errorText,
-        errorMaxLines: 2,
-      ),
-      style: const TextStyle(fontSize: 16, color: kInk),
+      decoration: const InputDecoration(border: OutlineInputBorder()),
     );
   }
 }
 
 /// ============ ShakeWidget ============
-/// (igual que el tuyo)
 class ShakeWidget extends StatefulWidget {
-  const ShakeWidget({super.key, required this.child, this.magnitude = 10, this.duration = const Duration(milliseconds: 420)});
+  const ShakeWidget({
+    super.key,
+    required this.child,
+    this.magnitude = 10,
+    this.duration = const Duration(milliseconds: 420),
+  });
   final Widget child;
   final double magnitude;
   final Duration duration;
-
   @override
   State<ShakeWidget> createState() => _ShakeWidgetState();
 }
 
-class _ShakeWidgetState extends State<ShakeWidget> with SingleTickerProviderStateMixin {
+class _ShakeWidgetState extends State<ShakeWidget>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _anim; // 0..1
-
+  late final Animation<double> _anim;
   @override
   void initState() {
     super.initState();
@@ -883,16 +483,14 @@ class _ShakeWidgetState extends State<ShakeWidget> with SingleTickerProviderStat
     super.dispose();
   }
 
-  // Genera sacudida tipo seno con leve amortiguación
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _anim,
       builder: (_, child) {
         final t = _anim.value;
-        final waves = 3;
-        final decay = (1.0 - t);
-        final dx = math.sin(t * waves * 2 * math.pi) * widget.magnitude * decay;
+        final dx =
+            math.sin(t * 3 * 2 * math.pi) * widget.magnitude * (1.0 - t);
         return Transform.translate(offset: Offset(dx, 0), child: child);
       },
       child: widget.child,

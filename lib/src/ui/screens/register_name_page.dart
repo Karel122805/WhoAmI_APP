@@ -28,12 +28,17 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   DateTime get _today => DateTime.now();
-  DateTime get _adultCutoff => DateTime(_today.year - 18, _today.month, _today.day);
+  DateTime get _adultCutoff =>
+      DateTime(_today.year - 18, _today.month, _today.day);
 
   bool _isAdult(DateTime date) {
     final t = _today;
-    final age = t.year - date.year -
-        ((t.month < date.month || (t.month == date.month && t.day < date.day)) ? 1 : 0);
+    final age = t.year -
+        date.year -
+        ((t.month < date.month ||
+                (t.month == date.month && t.day < date.day))
+            ? 1
+            : 0);
     return age >= 18;
   }
 
@@ -47,7 +52,6 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
     if (d == null || m == null || y == null) return null;
     try {
       final dt = DateTime(y, m, d);
-      // valida que no haya autocorrección (p.ej., 32 -> 01 del siguiente mes)
       if (dt.day == d && dt.month == m && dt.year == y) return dt;
     } catch (_) {}
     return null;
@@ -71,7 +75,7 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
       helpText: 'Selecciona tu fecha de nacimiento',
       cancelText: 'Cancelar',
       confirmText: 'Aceptar',
-      initialEntryMode: DatePickerEntryMode.calendarOnly, // calendario sin caja interna
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
     );
     if (picked != null) {
       setState(() {
@@ -85,9 +89,9 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
   void _next() {
     final validForm = _formKey.currentState!.validate();
 
-    // valida DOB
     if (_birthday == null) {
-      setState(() => _birthdayError = 'La fecha de nacimiento es obligatoria');
+      setState(() =>
+          _birthdayError = 'La fecha de nacimiento es obligatoria');
       return;
     } else if (!_isAdult(_birthday!)) {
       setState(() => _birthdayError = 'Debes tener al menos 18 años');
@@ -120,7 +124,8 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
   @override
   Widget build(BuildContext context) {
     return MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
+      data: MediaQuery.of(context)
+          .copyWith(textScaler: const TextScaler.linear(1.0)),
       child: Scaffold(
         body: SafeArea(
           child: Center(
@@ -144,12 +149,19 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
                                 top: 8,
                                 child: IconButton.filled(
                                   style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0xFFEAEAEA),
+                                    backgroundColor:
+                                        const Color(0xFFEAEAEA),
                                     shape: const CircleBorder(),
                                     fixedSize: const Size(40, 40),
                                   ),
-                                  onPressed: () => Navigator.maybePop(context),
-                                  icon: const Icon(Icons.arrow_back, color: kInk),
+                                  onPressed: () =>
+                                      Navigator.maybePop(context),
+                                  // 🔽 ICONO ACTUALIZADO (igual al de las demás pantallas)
+                                  icon: const Icon(
+                                    Icons.arrow_back_ios_new_rounded,
+                                    color: kInk,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                               const Center(
@@ -174,9 +186,11 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
                         const SizedBox(height: 6),
                         TextFormField(
                           controller: _nombre,
-                          decoration: const InputDecoration(hintText: ''),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'El nombre es obligatorio' : null,
+                          decoration:
+                              const InputDecoration(hintText: ''),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'El nombre es obligatorio'
+                              : null,
                         ),
 
                         const SizedBox(height: 14),
@@ -186,9 +200,11 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
                         const SizedBox(height: 6),
                         TextFormField(
                           controller: _apellidos,
-                          decoration: const InputDecoration(hintText: ''),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Los apellidos son obligatorios' : null,
+                          decoration:
+                              const InputDecoration(hintText: ''),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Los apellidos son obligatorios'
+                              : null,
                         ),
 
                         const SizedBox(height: 14),
@@ -200,17 +216,17 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
                           controller: _dobCtrl,
                           keyboardType: TextInputType.number,
                           onChanged: _onDobChanged,
-                          // 👇 OJO: sin `const` para evitar el error.
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(8), // 8 dígitos (ddMMyyyy)
-                            _DateSlashFormatter(),                // inserta “/”
+                            LengthLimitingTextInputFormatter(8),
+                            _DateSlashFormatter(),
                           ],
                           decoration: InputDecoration(
                             hintText: 'dd/mm/aaaa',
                             suffixIcon: IconButton(
                               tooltip: 'Elegir en calendario',
-                              icon: const Icon(Icons.calendar_today),
+                              icon:
+                                  const Icon(Icons.calendar_today_outlined),
                               onPressed: _pickDob,
                             ),
                           ),
@@ -220,7 +236,8 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
                               _birthdayError!,
-                              style: const TextStyle(color: Colors.red, fontSize: 12),
+                              style: const TextStyle(
+                                  color: Colors.red, fontSize: 12),
                             ),
                           ),
 
@@ -269,15 +286,14 @@ class _FieldLabel extends StatelessWidget {
 }
 
 /// Inserta "/" automáticamente al escribir una fecha dd/MM/aaaa.
-/// Tecleo: 1 2 0 9 2 0 0 5  ->  12/09/2005
 class _DateSlashFormatter extends TextInputFormatter {
   const _DateSlashFormatter();
 
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    // Solo dígitos
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
     var digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length > 8) digits = digits.substring(0, 8); // ddMMyyyy
+    if (digits.length > 8) digits = digits.substring(0, 8);
 
     final buf = StringBuffer();
     for (var i = 0; i < digits.length; i++) {
@@ -287,7 +303,6 @@ class _DateSlashFormatter extends TextInputFormatter {
 
     final formatted = buf.toString();
 
-    // Cursor al final del texto formateado
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),

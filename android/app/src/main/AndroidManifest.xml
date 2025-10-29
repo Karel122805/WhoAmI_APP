@@ -15,6 +15,9 @@
     <!-- Permite reprogramar notificaciones al reiniciar el teléfono -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- 🔔 Permite programar alarmas exactas (Android 12+) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <!-- Lectura de fotos/galería -->
     <uses-permission
         android:name="android.permission.READ_MEDIA_IMAGES"
