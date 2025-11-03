@@ -17,8 +17,6 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
   final _formKey = GlobalKey<FormState>();
   final _nombre = TextEditingController();
   final _apellidos = TextEditingController();
-
-  // 👇 controlador visible con slashes automáticos
   final _dobCtrl = TextEditingController();
 
   DateTime? _birthday;
@@ -42,16 +40,23 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
     return age >= 18;
   }
 
-  // Intenta parsear "dd/MM/yyyy" a DateTime
+  // ✅ Valida y convierte "dd/MM/yyyy" a una fecha real
   DateTime? _parseDob(String s) {
     final p = s.split('/');
     if (p.length != 3) return null;
+
     final d = int.tryParse(p[0]);
     final m = int.tryParse(p[1]);
     final y = int.tryParse(p[2]);
+
     if (d == null || m == null || y == null) return null;
+    if (m < 1 || m > 12) return null;
+    if (d < 1 || d > 31) return null;
+    if (y < 1900 || y > DateTime.now().year) return null;
+
     try {
       final dt = DateTime(y, m, d);
+      // Confirma que realmente exista (por ejemplo 31/02 no existe)
       if (dt.day == d && dt.month == m && dt.year == y) return dt;
     } catch (_) {}
     return null;
@@ -61,7 +66,7 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
     final dt = _parseDob(_dobCtrl.text);
     setState(() {
       _birthday = dt;
-      _birthdayError = null; // limpiar mientras escribe
+      _birthdayError = null;
     });
   }
 
@@ -89,16 +94,21 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
   void _next() {
     final validForm = _formKey.currentState!.validate();
 
-    if (_birthday == null) {
-      setState(() =>
-          _birthdayError = 'La fecha de nacimiento es obligatoria');
+    // 🔎 Validación estricta de la fecha
+    final dob = _parseDob(_dobCtrl.text);
+    if (dob == null) {
+      setState(() => _birthdayError = 'Fecha inválida. Usa el formato dd/mm/aaaa');
       return;
-    } else if (!_isAdult(_birthday!)) {
+    }
+    if (!_isAdult(dob)) {
       setState(() => _birthdayError = 'Debes tener al menos 18 años');
       return;
-    } else {
-      setState(() => _birthdayError = null);
     }
+
+    setState(() {
+      _birthday = dob;
+      _birthdayError = null;
+    });
 
     if (!validForm) return;
 
@@ -124,141 +134,117 @@ class _RegisterNamePageState extends State<RegisterNamePage> {
   @override
   Widget build(BuildContext context) {
     return MediaQuery(
-      data: MediaQuery.of(context)
-          .copyWith(textScaler: const TextScaler.linear(1.0)),
+      data:
+          MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
       child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: kInk),
+            onPressed: () => Navigator.maybePop(context),
+          ),
+          centerTitle: true,
+          title: const Text(
+            'Regístrate',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: kInk,
+            ),
+          ),
+        ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 8),
-                        SizedBox(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 8),
+                      const Align(child: BrandLogo(size: 170)),
+                      const SizedBox(height: 22),
+
+                      // ===== Campo Nombre =====
+                      const _FieldLabel('Nombre'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _nombre,
+                        decoration: const InputDecoration(hintText: 'Tu nombre'),
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'El nombre es obligatorio'
+                            : null,
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // ===== Campo Apellidos =====
+                      const _FieldLabel('Apellidos'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _apellidos,
+                        decoration:
+                            const InputDecoration(hintText: 'Tus apellidos'),
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Los apellidos son obligatorios'
+                            : null,
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // ===== Fecha de nacimiento =====
+                      const _FieldLabel('Fecha de nacimiento'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _dobCtrl,
+                        keyboardType: TextInputType.number,
+                        onChanged: _onDobChanged,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(8),
+                          _DateSlashFormatter(),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: 'dd/mm/aaaa',
+                          suffixIcon: IconButton(
+                            tooltip: 'Elegir en calendario',
+                            icon: const Icon(Icons.calendar_today),
+                            onPressed: _pickDob,
+                          ),
+                        ),
+                      ),
+                      if (_birthdayError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            _birthdayError!,
+                            style: const TextStyle(
+                                color: Colors.red, fontSize: 12),
+                          ),
+                        ),
+
+                      const SizedBox(height: 28),
+
+                      // ===== Botón Siguiente =====
+                      Align(
+                        child: SizedBox(
+                          width: 296,
                           height: 56,
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: 0,
-                                top: 8,
-                                child: IconButton.filled(
-                                  style: IconButton.styleFrom(
-                                    backgroundColor:
-                                        const Color(0xFFEAEAEA),
-                                    shape: const CircleBorder(),
-                                    fixedSize: const Size(40, 40),
-                                  ),
-                                  onPressed: () =>
-                                      Navigator.maybePop(context),
-                                  // 🔽 ICONO ACTUALIZADO (igual al de las demás pantallas)
-                                  icon: const Icon(
-                                    Icons.arrow_back_ios_new_rounded,
-                                    color: kInk,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-                              const Center(
-                                child: Text(
-                                  'Regístrate',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w700,
-                                    color: kInk,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          child: FilledButton(
+                            style: pillBlue(),
+                            onPressed: _next,
+                            child: const Text('Siguiente'),
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        const Align(child: BrandLogo(size: 170)),
-                        const SizedBox(height: 22),
+                      ),
 
-                        // ===== Campo Nombre =====
-                        const _FieldLabel('Nombre'),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _nombre,
-                          decoration:
-                              const InputDecoration(hintText: ''),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'El nombre es obligatorio'
-                              : null,
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // ===== Campo Apellidos =====
-                        const _FieldLabel('Apellidos'),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _apellidos,
-                          decoration:
-                              const InputDecoration(hintText: ''),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Los apellidos son obligatorios'
-                              : null,
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // ===== Fecha de nacimiento =====
-                        const _FieldLabel('Fecha de nacimiento'),
-                        const SizedBox(height: 6),
-                        TextFormField(
-                          controller: _dobCtrl,
-                          keyboardType: TextInputType.number,
-                          onChanged: _onDobChanged,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(8),
-                            _DateSlashFormatter(),
-                          ],
-                          decoration: InputDecoration(
-                            hintText: 'dd/mm/aaaa',
-                            suffixIcon: IconButton(
-                              tooltip: 'Elegir en calendario',
-                              icon:
-                                  const Icon(Icons.calendar_today_outlined),
-                              onPressed: _pickDob,
-                            ),
-                          ),
-                        ),
-                        if (_birthdayError != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              _birthdayError!,
-                              style: const TextStyle(
-                                  color: Colors.red, fontSize: 12),
-                            ),
-                          ),
-
-                        const SizedBox(height: 28),
-
-                        // ===== Botón Siguiente =====
-                        Align(
-                          child: SizedBox(
-                            width: 296,
-                            height: 56,
-                            child: FilledButton(
-                              style: pillBlue(),
-                              onPressed: _next,
-                              child: const Text('Siguiente'),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 28),
-                      ],
-                    ),
+                      const SizedBox(height: 28),
+                    ],
                   ),
                 ),
               ),
@@ -286,6 +272,7 @@ class _FieldLabel extends StatelessWidget {
 }
 
 /// Inserta "/" automáticamente al escribir una fecha dd/MM/aaaa.
+/// Ejemplo: 1 2 0 9 2 0 0 5 -> 12/09/2005
 class _DateSlashFormatter extends TextInputFormatter {
   const _DateSlashFormatter();
 
@@ -302,7 +289,6 @@ class _DateSlashFormatter extends TextInputFormatter {
     }
 
     final formatted = buf.toString();
-
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),

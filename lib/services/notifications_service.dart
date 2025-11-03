@@ -3,14 +3,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:firebase_auth/firebase_auth.dart';
+
 
 /// =============================================================
 /// SERVICIO CENTRALIZADO DE NOTIFICACIONES
 /// =============================================================
-/// - Inicializa permisos y canal de Android/iOS.
-/// - Programa recordatorios periódicos por cadencia.
-/// - Corrige el problema de "exact alarms not permitted".
-/// - Usa zona horaria local y evita fechas pasadas.
+/// Compatible con Android 13–15 y iOS.
+/// Maneja la inicialización, programación, cancelación
+/// y consulta de notificaciones locales.
 /// =============================================================
 
 enum MemoryCadence {
@@ -27,7 +28,9 @@ enum MemoryCadence {
   annual,
 }
 
-/// Convierte texto de base de datos a enum
+/// =============================================================
+/// Conversión de texto a tipo de cadencia
+/// =============================================================
 MemoryCadence cadenceFromString(String v) {
   switch (v) {
     case 'hourly1':
@@ -57,12 +60,17 @@ MemoryCadence cadenceFromString(String v) {
   }
 }
 
+/// =============================================================
+/// CLASE PRINCIPAL DE SERVICIO DE NOTIFICACIONES
+/// =============================================================
 class NotificationsService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  static bool _initialized = false;
+  /// Getter público para acceder al plugin desde otras clases
   static FlutterLocalNotificationsPlugin get plugin => _plugin;
+
+  static bool _initialized = false;
 
   static const _androidChannelId = 'memories_reminders';
   static const _androidChannelName = 'Recordatorios de recuerdos';
@@ -70,7 +78,7 @@ class NotificationsService {
       'Notificaciones periódicas de recuerdos programados por el usuario.';
 
   /// =============================================================
-  /// ✅ Inicialización segura (una sola vez)
+  /// Inicialización segura sin requestPermission()
   /// =============================================================
   static Future<void> init() async {
     if (_initialized) return;
@@ -85,38 +93,38 @@ class NotificationsService {
 
       await _plugin.initialize(initSettings);
 
-      // Android: permisos y canal
       final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin?.requestNotificationsPermission();
 
+      // Crear canal de notificaciones persistente
       const androidChannel = AndroidNotificationChannel(
         _androidChannelId,
         _androidChannelName,
         description: _androidChannelDesc,
-        importance: Importance.high,
+        importance: Importance.max,
       );
       await androidPlugin?.createNotificationChannel(androidChannel);
 
-      // iOS: permisos
+      // iOS: solicitar permisos visuales
       await _plugin
           .resolvePlatformSpecificImplementation<
               IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(alert: true, badge: true, sound: true);
 
       _initialized = true;
-      if (kDebugMode) debugPrint('✅ Notificaciones inicializadas');
+      debugPrint('✅ Notificaciones inicializadas correctamente');
     } catch (e) {
       debugPrint('⚠️ Error al inicializar notificaciones: $e');
     }
   }
 
+  /// Garantiza que esté inicializado antes de usarse
   static Future<void> ensureInitialized() async {
     if (!_initialized) await init();
   }
 
   /// =============================================================
-  /// 🕒 Programar notificaciones con cadencia personalizada
+  /// Programar notificaciones con cadencia personalizada
   /// =============================================================
   static Future<void> scheduleForMemory({
     required String memoryId,
@@ -127,30 +135,17 @@ class NotificationsService {
   }) async {
     await ensureInitialized();
 
-    // 🔄 Cancelar anteriores del mismo recuerdo
+    // Cancelar anteriores
     await cancelAllForMemory(memoryId);
 
-    // ✅ Asegurar que el ancla esté en el futuro
-    final now = DateTime.now();
-    if (anchorDate.isBefore(now)) {
-      anchorDate = now.add(const Duration(minutes: 1));
+    // Asegurar que la fecha esté en el futuro
+    var adjustedDate = anchorDate;
+    if (adjustedDate.isBefore(DateTime.now())) {
+      adjustedDate = DateTime.now().add(const Duration(minutes: 1));
     }
 
-    // ✅ Convertir a zona horaria local
-    anchorDate = tz.TZDateTime.from(anchorDate, tz.local);
-
     final baseId = _baseId(memoryId);
-    final nowTz = tz.TZDateTime.now(tz.local);
-
-    // 🔁 Generar lista de ocurrencias (en futuro)
-    final occurrencesList = _generateOccurrencesFromAnchorPlusInterval(
-      anchorDate,
-      cadence,
-      occurrences,
-    )
-        .map((d) => tz.TZDateTime.from(d, tz.local))
-        .where((d) => d.isAfter(nowTz))
-        .toList();
+    final list = _generateOccurrences(adjustedDate, cadence, occurrences);
 
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
@@ -163,52 +158,57 @@ class NotificationsService {
       iOS: DarwinNotificationDetails(),
     );
 
-    for (var i = 0; i < occurrencesList.length; i++) {
+    for (var i = 0; i < list.length; i++) {
       try {
         await _plugin.zonedSchedule(
           baseId + i,
           'Recordatorio de recuerdo',
           title,
-          occurrencesList[i],
+          tz.TZDateTime.from(list[i], tz.local),
           details,
-          // 🟣 CORREGIDO: ya no usa alarmas exactas
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           androidAllowWhileIdle: true,
           payload: memoryId,
         );
       } catch (e) {
-        debugPrint('⚠️ Error al programar notificación $i: $e');
+        debugPrint('Error al programar notificación $i: $e');
       }
     }
 
-    if (kDebugMode) {
-      debugPrint(
-          '🕒 Programadas ${occurrencesList.length} notificaciones para $memoryId');
-      for (var dt in occurrencesList) {
-        debugPrint(' • ${dt.toLocal()}');
-      }
-    }
+    debugPrint('✅ Programadas ${list.length} notificaciones para $memoryId');
   }
 
   /// =============================================================
-  /// ❌ Cancelar todas las notificaciones de un recuerdo
+  /// Cancelar todas las notificaciones de un recuerdo
   /// =============================================================
   static Future<void> cancelAllForMemory(String memoryId) async {
     await ensureInitialized();
     final base = _baseId(memoryId);
     for (var i = 0; i < 50; i++) {
-      try {
-        await _plugin.cancel(base + i);
-      } catch (e) {
-        debugPrint('⚠️ Error al cancelar notificación $i: $e');
-      }
+      await _plugin.cancel(base + i);
     }
   }
 
   /// =============================================================
-  /// 📋 Consultar pendientes
+  /// Cancelar una notificación individual
+  /// =============================================================
+  static Future<void> cancel(int id) async {
+    await ensureInitialized();
+    await _plugin.cancel(id);
+  }
+
+  /// =============================================================
+  /// Cancelar todas las notificaciones
+  /// =============================================================
+  static Future<void> cancelAll() async {
+    await ensureInitialized();
+    await _plugin.cancelAll();
+  }
+
+  /// =============================================================
+  /// Obtener lista de notificaciones pendientes
   /// =============================================================
   static Future<List<PendingNotificationRequest>>
       pendingNotificationRequests() async {
@@ -216,45 +216,43 @@ class NotificationsService {
     try {
       return await _plugin.pendingNotificationRequests();
     } catch (e) {
-      debugPrint('⚠️ Error al obtener pendientes: $e');
+      debugPrint('⚠️ Error al obtener notificaciones pendientes: $e');
       return [];
     }
   }
 
-  static Future<void> cancel(int id) async {
+  /// =============================================================
+  /// Obtener cantidad de notificaciones pendientes
+  /// =============================================================
+  static Future<int> getPendingCount() async {
     await ensureInitialized();
     try {
-      await _plugin.cancel(id);
+      final pending = await _plugin.pendingNotificationRequests();
+      return pending.length;
     } catch (e) {
-      debugPrint('⚠️ Error al cancelar notificación $id: $e');
-    }
-  }
-
-  static Future<void> cancelAll() async {
-    await ensureInitialized();
-    try {
-      await _plugin.cancelAll();
-    } catch (e) {
-      debugPrint('⚠️ Error al cancelar todas: $e');
+      debugPrint('⚠️ No se pudieron obtener notificaciones pendientes: $e');
+      return 0;
     }
   }
 
   // =============================================================
-  // 🔧 Internos
+  // Internos
   // =============================================================
-  static int _baseId(String memoryId) {
-    // ID estable y único (dentro del rango 100000–999999)
-    return (memoryId.hashCode & 0x7fffffff) % 900000 + 100000;
-  }
+  static int _baseId(String id) {
+  final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+  final combined = '$uid-$id';
+  return (combined.hashCode & 0x7fffffff) % 900000 + 100000;
+}
 
-  static Iterable<DateTime> _generateOccurrencesFromAnchorPlusInterval(
-      DateTime anchor, MemoryCadence c, int n) sync* {
-    DateTime current =
-        DateTime(anchor.year, anchor.month, anchor.day, anchor.hour, anchor.minute);
-    for (int i = 0; i < n; i++) {
+  static List<DateTime> _generateOccurrences(
+      DateTime start, MemoryCadence c, int count) {
+    final result = <DateTime>[];
+    var current = start;
+    for (int i = 0; i < count; i++) {
       current = _addCadence(current, c);
-      yield current;
+      result.add(current);
     }
+    return result;
   }
 
   static DateTime _addCadence(DateTime d, MemoryCadence c) {
@@ -294,9 +292,8 @@ class NotificationsService {
 
   static int _daysInMonth(int year, int month) {
     final first = DateTime(year, month, 1);
-    final next = (month == 12)
-        ? DateTime(year + 1, 1, 1)
-        : DateTime(year, month + 1, 1);
+    final next =
+        (month == 12) ? DateTime(year + 1, 1, 1) : DateTime(year, month + 1, 1);
     return next.difference(first).inDays;
   }
 }

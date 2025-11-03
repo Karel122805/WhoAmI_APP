@@ -1,8 +1,3 @@
-// lib/src/ui/screens/home_caregiver.dart
-//
-// Pantalla principal del rol "Cuidador".
-// Incluye badge rojo en la campanita con el número de notificaciones pendientes.
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,6 +12,10 @@ import 'notifications_page.dart';
 import 'package:whoami_app/services/memories_scheduler.dart';
 import 'package:whoami_app/services/notifications_service.dart';
 
+/// =============================================================
+/// HOME CAREGIVER PAGE — VERSIÓN FINAL FUNCIONAL
+/// =============================================================
+
 class HomeCaregiverPage extends StatefulWidget {
   const HomeCaregiverPage({super.key, this.displayName});
   static const route = '/home/caregiver';
@@ -29,33 +28,67 @@ class HomeCaregiverPage extends StatefulWidget {
 
 class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
   int _notifCount = 0;
+  bool _loadingNotif = true;
 
   @override
   void initState() {
     super.initState();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      MemoriesScheduler.scheduleAllForUser(uid).whenComplete(_loadNotifCount);
-    } else {
-      _loadNotifCount();
+    _initializeHome();
+  }
+
+  Future<void> _initializeHome() async {
+    try {
+      // Inicializar el servicio de notificaciones
+      await NotificationsService.ensureInitialized();
+
+      // Reprogramar los recordatorios de recuerdos para el usuario actual
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        await MemoriesScheduler.scheduleAllForUser(uid);
+      }
+
+      // Cargar cantidad inicial de notificaciones
+      await _loadNotifCount();
+    } catch (e) {
+      debugPrint('⚠️ Error en inicialización del HomeCaregiver: $e');
     }
   }
 
+  /// =============================================================
+  /// Cargar número de notificaciones pendientes
+  /// =============================================================
   Future<void> _loadNotifCount() async {
-    final pending = await NotificationsService.pendingNotificationRequests();
-    if (!mounted) return;
-    setState(() => _notifCount = pending.length);
+    try {
+      final pending =
+          await NotificationsService.plugin.pendingNotificationRequests();
+      if (!mounted) return;
+      setState(() {
+        _notifCount = pending.length;
+        _loadingNotif = false;
+      });
+    } catch (e) {
+      debugPrint('⚠️ Error al cargar notificaciones pendientes: $e');
+      if (!mounted) return;
+      setState(() => _loadingNotif = false);
+    }
   }
 
+  /// =============================================================
+  /// Abrir pantalla de notificaciones y actualizar contador al volver
+  /// =============================================================
   Future<void> _openNotifications() async {
     await Navigator.pushNamed(context, NotificationsPage.route);
     await _loadNotifCount();
   }
 
+  /// =============================================================
+  /// Interfaz principal
+  /// =============================================================
   @override
   Widget build(BuildContext context) {
     return MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1)),
+      data:
+          MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1)),
       child: Scaffold(
         backgroundColor: Colors.white,
         body: Stack(
@@ -77,11 +110,13 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                         StreamBuilder<User?>(
                           stream: FirebaseAuth.instance.userChanges(),
                           builder: (context, authSnap) {
-                            final user = authSnap.data ?? FirebaseAuth.instance.currentUser;
+                            final user =
+                                authSnap.data ?? FirebaseAuth.instance.currentUser;
                             if (user == null) return const SizedBox();
                             final uid = user.uid;
 
-                            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            return StreamBuilder<
+                                DocumentSnapshot<Map<String, dynamic>>>(
                               stream: FirebaseFirestore.instance
                                   .collection('users')
                                   .doc(uid)
@@ -89,11 +124,15 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                               builder: (context, docSnap) {
                                 String name = 'Cuidador';
 
-                                if (docSnap.hasData && docSnap.data!.data() != null) {
+                                if (docSnap.hasData &&
+                                    docSnap.data!.data() != null) {
                                   final data = docSnap.data!.data()!;
-                                  final first = (data['firstName'] as String?)?.trim() ?? '';
-                                  final last = (data['lastName'] as String?)?.trim() ?? '';
-                                  final fsName = [first, last].where((e) => e.isNotEmpty).join(' ');
+                                  final first =
+                                      (data['firstName'] as String?)?.trim() ?? '';
+                                  final last =
+                                      (data['lastName'] as String?)?.trim() ?? '';
+                                  final fsName =
+                                      [first, last].where((e) => e.isNotEmpty).join(' ');
                                   if (fsName.isNotEmpty) name = fsName;
                                 }
 
@@ -104,10 +143,14 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
 
                                 if (name == 'Cuidador') {
                                   final mail = user.email ?? '';
-                                  if (mail.contains('@')) name = mail.split('@').first;
+                                  if (mail.contains('@')) {
+                                    name = mail.split('@').first;
+                                  }
                                 }
 
-                                name = name.isNotEmpty ? name : (widget.displayName ?? 'Cuidador');
+                                name = name.isNotEmpty
+                                    ? name
+                                    : (widget.displayName ?? 'Cuidador');
 
                                 return Text(
                                   'Bienvenido $name',
@@ -124,45 +167,46 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                         ),
 
                         const SizedBox(height: 8),
-                        const Text('Selecciona una opción', style: TextStyle(color: kGrey1)),
+                        const Text(
+                          'Selecciona una opción',
+                          style: TextStyle(color: kGrey1),
+                        ),
                         const SizedBox(height: 20),
 
+                        // Opciones principales
                         _PillButton(
                           color: kPurple,
                           icon: Icons.people_outline,
                           text: 'Pacientes',
-                          onTap: () {
-                            Navigator.pushNamed(context, PatientsListPage.route);
-                          },
+                          onTap: () => Navigator.pushNamed(
+                              context, PatientsListPage.route),
                         ),
                         _PillButton(
                           color: kPurple,
                           icon: Icons.menu_book_outlined,
                           text: 'Guías Rápidas',
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const QuickGuidesPage()),
-                            );
-                          },
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const QuickGuidesPage()),
+                          ),
                         ),
                         _PillButton(
                           color: kPurple,
                           icon: Icons.event_note_outlined,
                           text: 'Calendario de Recuerdos',
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CalendarPage()),
-                            );
-                          },
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CalendarPage()),
+                          ),
                         ),
                         _PillButton(
                           color: kPurple,
                           icon: Icons.chat_bubble_outline,
                           text: 'ChatWhoAmI',
                           onTap: () {
-                            // Implementación futura del chat
+                            // Implementación futura
                           },
                         ),
 
@@ -182,12 +226,10 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                   padding: const EdgeInsets.only(left: 8, top: 4),
                   child: IconButton(
                     icon: const Icon(Icons.settings, color: kInk, size: 28),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SettingsPage()),
-                      );
-                    },
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    ),
                     tooltip: 'Ajustes',
                   ),
                 ),
@@ -202,6 +244,7 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
                   padding: const EdgeInsets.only(right: 8, top: 4),
                   child: _NotificationBell(
                     count: _notifCount,
+                    loading: _loadingNotif,
                     onTap: _openNotifications,
                   ),
                 ),
@@ -214,14 +257,20 @@ class _HomeCaregiverPageState extends State<HomeCaregiverPage> {
   }
 }
 
+// =============================================================
+// COMPONENTES REUTILIZABLES
+// =============================================================
+
 // Campanita con badge rojo reutilizable
 class _NotificationBell extends StatelessWidget {
   const _NotificationBell({
     required this.count,
     required this.onTap,
+    this.loading = false,
   });
 
   final int count;
+  final bool loading;
   final VoidCallback onTap;
 
   @override
@@ -233,21 +282,34 @@ class _NotificationBell extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         IconButton(
-          onPressed: onTap,
-          icon: const Icon(Icons.notifications_none_rounded, color: kInk, size: 28),
+          onPressed: loading ? null : onTap,
+          icon: const Icon(Icons.notifications_none_rounded,
+              color: kInk, size: 28),
           tooltip: 'Notificaciones',
         ),
-        if (showBadge)
+        if (loading)
+          const Positioned(
+            right: 10,
+            top: 10,
+            child: SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        if (!loading && showBadge)
           Positioned(
             right: 6,
             top: 6,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: Colors.red,
                 borderRadius: BorderRadius.circular(12),
               ),
-              constraints: const BoxConstraints(minWidth: 20, minHeight: 18),
+              constraints:
+                  const BoxConstraints(minWidth: 20, minHeight: 18),
               alignment: Alignment.center,
               child: Text(
                 display,

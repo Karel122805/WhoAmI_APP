@@ -1,3 +1,4 @@
+// lib/src/ui/screens/notifications_page.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -5,67 +6,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/notifications_service.dart';
 import '../theme.dart';
-
-/// ===================== Helpers locales (DIÁLOGOS) =====================
-
-Future<void> _showOkDialog(
-  BuildContext context, {
-  required String title,
-  required String message,
-  String okText = 'Aceptar',
-}) async {
-  await showDialog<void>(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      content: Text(message),
-      actions: [
-        TextButton(
-          style: TextButton.styleFrom(
-            backgroundColor: kPurple,
-            foregroundColor: kInk,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(okText),
-        ),
-      ],
-    ),
-  );
-}
-
-Future<bool> _showConfirmDialog(
-  BuildContext context, {
-  String title = 'Confirmar',
-  required String message,
-  String cancelText = 'Cancelar',
-  String okText = 'Aceptar',
-}) async {
-  final res = await showDialog<bool>(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      content: Text(message),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(cancelText),
-        ),
-        TextButton(
-          style: TextButton.styleFrom(
-            backgroundColor: kPurple,
-            foregroundColor: kInk,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(okText),
-        ),
-      ],
-    ),
-  );
-  return res ?? false;
-}
-/// =====================================================================
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -77,7 +17,9 @@ class NotificationsPage extends StatefulWidget {
 
 class _NotificationsPageState extends State<NotificationsPage> {
   List<PendingNotificationRequest> _pending = [];
+  final Set<int> _selectedIds = {};
   bool _loading = false;
+  bool _selectMode = false;
 
   @override
   void initState() {
@@ -86,7 +28,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _loadPending() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _selectedIds.clear();
+      _selectMode = false;
+    });
     final list = await NotificationsService.pendingNotificationRequests();
     if (!mounted) return;
     list.sort((a, b) => a.id.compareTo(b.id));
@@ -96,52 +42,159 @@ class _NotificationsPageState extends State<NotificationsPage> {
     });
   }
 
-  Future<void> _cancel(int id) async {
-    final ok = await _showConfirmDialog(context, message: '¿Eliminar este recordatorio?');
+  void _toggleSelectMode() {
+    setState(() {
+      _selectMode = !_selectMode;
+      if (!_selectMode) _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelect(int id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) {
+      _showOkDialog(context,
+          title: 'Atención',
+          message: 'Debes seleccionar al menos una notificación para borrarla.');
+      return;
+    }
+
+    final msg = _selectedIds.length == 1
+        ? '¿Está seguro de eliminar esta notificación? Esta acción no se puede deshacer.'
+        : '¿Está seguro de eliminar las ${_selectedIds.length} notificaciones seleccionadas? Esta acción no se puede deshacer.';
+
+    final ok = await _showConfirmDialog(context, message: msg);
     if (!ok) return;
-    await NotificationsService.cancel(id);
+
+    for (final id in _selectedIds) {
+      await NotificationsService.cancel(id);
+    }
     await _loadPending();
     if (!mounted) return;
-    await _showOkDialog(context, title: 'Eliminado', message: 'Se eliminó el recordatorio.');
+
+    final doneMsg = _selectedIds.length == 1
+        ? 'Notificación eliminada exitosamente.'
+        : 'Notificaciones eliminadas exitosamente.';
+    _showOkDialog(context, title: 'Listo', message: doneMsg);
   }
 
-  Future<void> _cancelAll() async {
-    if (_pending.isEmpty) return;
-    final ok = await _showConfirmDialog(context, message: '¿Eliminar TODOS los recordatorios?');
-    if (!ok) return;
-    await NotificationsService.cancelAll();
-    await _loadPending();
-    if (!mounted) return;
-    await _showOkDialog(context, title: 'Listo', message: 'Se eliminaron todas las notificaciones.');
-  }
+@override
+Widget build(BuildContext context) {
+  final total = _pending.length;
 
-  ButtonStyle _compact(ButtonStyle? base) {
-    final compact = TextButton.styleFrom(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      minimumSize: const Size(0, 40),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-    );
-    return (base ?? const ButtonStyle()).merge(compact);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final title =
-        _pending.isEmpty ? 'Notificaciones' : 'Notificaciones (${_pending.length})';
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), tooltip: 'Actualizar', onPressed: _loadPending),
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_outlined),
-            tooltip: 'Eliminar todas',
-            onPressed: _pending.isEmpty ? null : _cancelAll,
-          ),
-        ],
+  return Scaffold(
+    backgroundColor: Colors.white,
+    appBar: AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      iconTheme: const IconThemeData(color: Colors.black),
+      centerTitle: true,
+      title: FittedBox(
+  fit: BoxFit.scaleDown,
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Text(
+        'Notificaciones',
+        style: TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+          fontSize: 20,
+        ),
       ),
+      if (_pending.isNotEmpty) ...[
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: kPurple.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '${_pending.length}',
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ],
+  ),
+),
+
+    actions: [
+  // 🔄 Refrescar
+  IconButton(
+    icon: const Icon(Icons.refresh_rounded, color: Colors.black),
+    tooltip: 'Actualizar',
+    onPressed: _loadPending,
+  ),
+
+  // ✅ Alternar modo selección
+  IconButton(
+    icon: Icon(
+      _selectMode ? Icons.close_rounded : Icons.check_box_rounded,
+      color: Colors.black,
+    ),
+    tooltip:
+        _selectMode ? 'Salir de selección' : 'Seleccionar notificaciones',
+    onPressed: _toggleSelectMode,
+  ),
+
+  // ⋮ Menú contextual para opciones
+  PopupMenuButton<String>(
+    icon: const Icon(Icons.more_vert_rounded, color: Colors.black),
+    tooltip: 'Más opciones',
+    onSelected: (value) {
+      if (value == 'select_all') {
+        setState(() {
+          if (_selectedIds.length == _pending.length) {
+            _selectedIds.clear();
+          } else {
+            _selectedIds.addAll(_pending.map((n) => n.id));
+          }
+        });
+      } else if (value == 'delete') {
+        _deleteSelected();
+      }
+    },
+    itemBuilder: (context) => [
+      const PopupMenuItem(
+        value: 'select_all',
+        child: Row(
+          children: [
+            Icon(Icons.done_all_rounded, size: 20, color: Colors.black54),
+            SizedBox(width: 10),
+            Text('Seleccionar todo'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: 'delete',
+        child: Row(
+          children: [
+            Icon(Icons.delete_forever_rounded, size: 20, color: Colors.black54),
+            SizedBox(width: 10),
+            Text('Eliminar seleccionadas'),
+          ],
+        ),
+      ),
+    ],
+  ),
+],
+
+
+    ),
       body: RefreshIndicator(
         onRefresh: _loadPending,
         child: _loading
@@ -153,69 +206,94 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     itemCount: _pending.length,
                     itemBuilder: (context, i) {
                       final n = _pending[i];
-                      final title = (n.title?.trim().isNotEmpty ?? false)
+                      final selected = _selectedIds.contains(n.id);
+                      final title = (n.title?.isNotEmpty ?? false)
                           ? n.title!
                           : 'Recordatorio de recuerdo';
-                      final body = (n.body?.trim().isNotEmpty ?? false) ? n.body! : null;
+                      final body = (n.body?.isNotEmpty ?? false)
+                          ? n.body!
+                          : 'Sin descripción';
 
-                      return Card(
-                        elevation: 0,
-                        color: kFieldFill,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: const BorderSide(color: kFieldBorder),
-                        ),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
+                      return GestureDetector(
+                        onTap: _selectMode
+                            ? () => _toggleSelect(n.id)
+                            : null,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: selected
+                                  ? kPurple.withOpacity(0.9)
+                                  : kPurple.withOpacity(0.4),
+                              width: selected ? 2.5 : 1.2,
+                            ),
+                            color: selected
+                                ? kPurple.withOpacity(0.1)
+                                : Colors.white,
+                            boxShadow: [
+                              if (selected)
+                                BoxShadow(
+                                  color: kPurple.withOpacity(0.15),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                )
+                            ],
+                          ),
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.all(14),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.notifications_active_rounded, color: kBlue),
+                                  if (_selectMode)
+                                    Checkbox(
+                                      value: selected,
+                                      activeColor: kPurple,
+                                      onChanged: (_) =>
+                                          _toggleSelect(n.id),
+                                    ),
+                                  Icon(
+                                    Icons.notifications_active_rounded,
+                                    color: kPurple,
+                                  ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       title,
                                       style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w700,
-                                        color: kInk,
-                                      ),
+                                          fontWeight: FontWeight.w700,
+                                          color: kInk,
+                                          fontSize: 17),
                                     ),
                                   ),
                                 ],
                               ),
-                              if (body != null) const SizedBox(height: 6),
-                              if (body != null)
-                                Text(body, style: const TextStyle(color: kGrey1, fontSize: 15)),
+                              const SizedBox(height: 6),
+                              Text(body,
+                                  style: const TextStyle(
+                                      color: kGrey1, fontSize: 14)),
                               const SizedBox(height: 12),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  TextButton(
-                                    style: _compact(TextButton.styleFrom(
-                                      backgroundColor: kPurple,
-                                      foregroundColor: kInk,
+                                  TextButton.icon(
+                                    icon: const Icon(Icons.photo_rounded,
+                                        color: Colors.black),
+                                    label: const Text('Ver recuerdo',
+                                        style:
+                                            TextStyle(color: Colors.black)),
+                                    style: TextButton.styleFrom(
+                                      backgroundColor:
+                                          const Color(0xFF9ED3FF),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(999),
-                                      ),
-                                    )),
-                                    onPressed: () => _showTrainMemoryDialog(context, n),
-                                    child: const Text('Ver recuerdo'),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  FilledButton(
-                                    style: _compact(FilledButton.styleFrom(
-                                      backgroundColor: Color(0xFFFF9CA0),
-                                      foregroundColor: kInk,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(999),
-                                      ),
-                                    )),
-                                    onPressed: () => _cancel(n.id),
-                                    child: const Text('Eliminar'),
+                                          borderRadius:
+                                              BorderRadius.circular(999)),
+                                    ),
+                                    onPressed: () =>
+                                        _showTrainMemoryDialog(context, n),
                                   ),
                                 ],
                               ),
@@ -241,7 +319,8 @@ Future<void> _showTrainMemoryDialog(
   final memoryId = parts.isNotEmpty ? parts.last : null;
 
   if (userId == null || memoryId == null) {
-    await _showOkDialog(context, title: 'Error', message: 'No se pudo identificar el recuerdo.');
+    await _showOkDialog(context,
+        title: 'Error', message: 'No se pudo identificar el recuerdo.');
     return;
   }
 
@@ -253,7 +332,8 @@ Future<void> _showTrainMemoryDialog(
       .get();
 
   if (!doc.exists) {
-    await _showOkDialog(context, title: 'No encontrado', message: 'Este recuerdo ya no existe.');
+    await _showOkDialog(context,
+        title: 'No encontrado', message: 'Este recuerdo ya no existe.');
     return;
   }
 
@@ -277,7 +357,6 @@ Future<void> _showTrainMemoryDialog(
   );
 }
 
-/// ─────────────── D I Á L O G O   A N I M A D O ───────────────
 class TrainMemoryDialog extends StatefulWidget {
   final String? imageUrl;
   final String text;
@@ -297,7 +376,7 @@ class TrainMemoryDialog extends StatefulWidget {
 class _TrainMemoryDialogState extends State<TrainMemoryDialog>
     with TickerProviderStateMixin {
   late final AnimationController _intro;
-  late final AnimationController _smoke; // impulsa humo y ruedas
+  late final AnimationController _smoke;
   late final AnimationController _leave;
   late final Animation<Offset> _trainIn;
   late final Animation<Offset> _trainOut;
@@ -306,22 +385,19 @@ class _TrainMemoryDialogState extends State<TrainMemoryDialog>
   @override
   void initState() {
     super.initState();
-    _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
+    _intro = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1200))
       ..forward();
-
-    // Cartoon rápido
-    _smoke = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))
+    _smoke = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600))
       ..repeat();
+    _leave = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 800));
 
-    _leave = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-
-    // ⟶ ENTRA de DERECHA → IZQUIERDA
     _trainIn = Tween<Offset>(begin: const Offset(1.2, 0), end: Offset.zero)
         .animate(CurvedAnimation(parent: _intro, curve: Curves.easeOutCubic));
-
-    // ⟵ SALE hacia la IZQUIERDA
     _trainOut = Tween<Offset>(begin: Offset.zero, end: const Offset(-1.3, 0))
-        .animate(CurvedAnimation(parent: _leave, curve: Curves.easeIn));
+        .animate(CurvedAnimation(parent: _leave, curve: Curves.easeInOutCubic));
   }
 
   @override
@@ -332,10 +408,9 @@ class _TrainMemoryDialogState extends State<TrainMemoryDialog>
     super.dispose();
   }
 
-  Future<void> _handleClose() async {
+  Future<void> _closeDialog() async {
     if (_closing) return;
     setState(() => _closing = true);
-    // dejamos humo + ruedas girando durante la salida
     await _leave.forward();
     _smoke.stop();
     if (mounted) Navigator.of(context).pop();
@@ -363,58 +438,72 @@ class _TrainMemoryDialogState extends State<TrainMemoryDialog>
                   children: [
                     const Text(
                       'El recuerdo ha llegado',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: kInk, fontSize: 18, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                          color: kInk,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 12),
-
                     _MemoryCardWhiteBorder(
-                      imageUrl: widget.imageUrl,
-                      text: widget.text,
-                      date: widget.date,
-                    ),
-
+                        imageUrl: widget.imageUrl,
+                        text: widget.text,
+                        date: widget.date),
                     const SizedBox(height: 16),
-
                     SizedBox(
                       height: 160,
                       child: Stack(
                         alignment: Alignment.bottomCenter,
                         children: [
-                          // Vía PINTADA ABAJO
-                          Positioned.fill(child: CustomPaint(painter: _TrackPainter())),
-
-                          // Humo blanco (ajustado a chimenea)
-                          Positioned(left: 148, bottom: 112, child: _SmokeLoop(controller: _smoke, size: 22, phase: 0.00)),
-                          Positioned(left: 164, bottom: 118, child: _SmokeLoop(controller: _smoke, size: 26, phase: 0.33)),
-                          Positioned(left: 182, bottom: 124, child: _SmokeLoop(controller: _smoke, size: 20, phase: 0.66)),
-
-                          // Tren encima de la vía: entra (→ ←) y sale (←)
+                          Positioned.fill(
+                              child: CustomPaint(painter: _TrackPainter())),
+                          Positioned(
+                              right: 145,
+                              bottom: 112,
+                              child: _SmokeLoop(
+                                  controller: _smoke,
+                                  size: 22,
+                                  phase: 0.00)),
+                          Positioned(
+                              right: 160,
+                              bottom: 118,
+                              child: _SmokeLoop(
+                                  controller: _smoke,
+                                  size: 26,
+                                  phase: 0.33)),
+                          Positioned(
+                              right: 175,
+                              bottom: 124,
+                              child: _SmokeLoop(
+                                  controller: _smoke,
+                                  size: 20,
+                                  phase: 0.66)),
                           SlideTransition(
                             position: _trainOut,
                             child: SlideTransition(
                               position: _trainIn,
                               child: Align(
                                 alignment: Alignment.bottomCenter,
-                                child: _TrainGraphicV3(spin: _smoke),
+                                child: _TrainGraphicCartoon(spin: _smoke),
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: TextButton(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.close_rounded,
+                            color: Colors.black),
+                        label: const Text('Cerrar',
+                            style: TextStyle(color: Colors.black)),
                         style: TextButton.styleFrom(
-                          backgroundColor: kPurple,
-                          foregroundColor: kInk,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          backgroundColor: const Color(0xFFFF9CA0),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
-                        onPressed: _handleClose,
-                        child: const Text('Cerrar'),
+                        onPressed: _closeDialog,
                       ),
                     ),
                   ],
@@ -428,17 +517,221 @@ class _TrainMemoryDialogState extends State<TrainMemoryDialog>
   }
 }
 
-/// ─────────────────── Tarjeta blanca con borde azul ───────────────────
+// ╭──────────────────────────────╮
+// │ Tren caricatura estilo dibujo │
+// ╰──────────────────────────────╯
+class _TrainGraphicCartoon extends StatelessWidget {
+  final Animation<double> spin;
+  const _TrainGraphicCartoon({required this.spin});
+
+  Widget _wheel(double l, double b) => AnimatedBuilder(
+        animation: spin,
+        builder: (_, __) {
+          final a = spin.value * math.pi * 4;
+          return Positioned(
+            left: l,
+            bottom: b,
+            child: Transform.rotate(
+              angle: a,
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                    color: Colors.red,
+                    border: Border.all(color: Colors.black, width: 2),
+                    shape: BoxShape.circle),
+              ),
+            ),
+          );
+        },
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    const base = 30.0;
+    return SizedBox(
+      width: 420,
+      height: 130,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Vagón 1 (morado)
+          Positioned(
+            left: 160,
+            bottom: base,
+            child: Container(
+              width: 90,
+              height: 55,
+              decoration: BoxDecoration(
+                  color: kPurple,
+                  border: Border.all(color: Colors.black, width: 3),
+                  borderRadius: BorderRadius.circular(6)),
+            ),
+          ),
+          _wheel(175, base - 20),
+          _wheel(220, base - 20),
+
+          // Vagón 2 (azul)
+          Positioned(
+            left: 270,
+            bottom: base,
+            child: Container(
+              width: 90,
+              height: 55,
+              decoration: BoxDecoration(
+                  color: kBlue,
+                  border: Border.all(color: Colors.black, width: 3),
+                  borderRadius: BorderRadius.circular(6)),
+            ),
+          ),
+          _wheel(285, base - 20),
+          _wheel(330, base - 20),
+
+          // Locomotora (roja)
+          Positioned(
+            left: 50,
+            bottom: base,
+            child: Container(
+              width: 100,
+              height: 65,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE74C3C),
+                border: Border.all(color: Colors.black, width: 3),
+              ),
+            ),
+          ),
+          // Cabina (azul fuerte)
+          Positioned(
+            left: 90,
+            bottom: base + 30,
+            child: Container(
+              width: 60,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                border: Border.all(color: Colors.black, width: 3),
+              ),
+            ),
+          ),
+          // Chimenea amarilla
+          Positioned(
+            left: 60,
+            bottom: base + 60,
+            child: Container(
+              width: 20,
+              height: 25,
+              decoration: BoxDecoration(
+                color: Colors.yellow.shade600,
+                border: Border.all(color: Colors.black, width: 3),
+              ),
+            ),
+          ),
+          // Techo verde
+          Positioned(
+            left: 85,
+            bottom: base + 68,
+            child: Container(
+              width: 70,
+              height: 10,
+              color: Colors.green.shade400,
+            ),
+          ),
+          // Ventana amarilla
+          Positioned(
+            left: 110,
+            bottom: base + 40,
+            child: Container(
+              width: 25,
+              height: 25,
+              decoration: BoxDecoration(
+                color: Colors.yellow.shade400,
+                border: Border.all(color: Colors.black, width: 2),
+              ),
+            ),
+          ),
+          _wheel(65, base - 20),
+          _wheel(110, base - 20),
+        ],
+      ),
+    );
+  }
+}
+
+// ╭──────────────────────────────╮
+// │ Pistas y humo animado        │
+// ╰──────────────────────────────╯
+class _TrackPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rail = Paint()
+      ..color = const Color(0xFFB9B9C9)
+      ..strokeWidth = 4;
+    final sleeper = Paint()
+      ..color = const Color(0xFF9E9EB2)
+      ..strokeWidth = 6;
+    final yU = size.height - 28, yL = size.height - 20;
+    canvas.drawLine(Offset(12, yU), Offset(size.width - 12, yU), rail);
+    canvas.drawLine(Offset(12, yL), Offset(size.width - 12, yL), rail);
+    for (double x = 20; x < size.width - 10; x += 18) {
+      canvas.drawLine(Offset(x, yU - 4), Offset(x, yL + 4), sleeper);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _SmokeLoop extends StatelessWidget {
+  final AnimationController controller;
+  final double size;
+  final double phase;
+  const _SmokeLoop(
+      {required this.controller, required this.size, required this.phase});
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: controller,
+        builder: (_, __) {
+          double t = (controller.value + phase) % 1.0;
+          final dy = -32 * t;
+          final s = 0.7 + 0.7 * t;
+          final o = (t < 0.15) ? (t / 0.15) : (1.0 - t);
+          return Opacity(
+            opacity: o.clamp(0.0, 1.0),
+            child: Transform.translate(
+              offset: Offset(0, dy),
+              child: Transform.scale(scale: s, child: _SmokePuff(size: size)),
+            ),
+          );
+        },
+      );
+}
+
+class _SmokePuff extends StatelessWidget {
+  final double size;
+  const _SmokePuff({required this.size});
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)
+          ],
+        ),
+      );
+}
+
+// ╭──────────────────────────────╮
+// │ Tarjeta de recuerdo          │
+// ╰──────────────────────────────╯
 class _MemoryCardWhiteBorder extends StatelessWidget {
   final String? imageUrl;
   final String text;
   final String date;
-
-  const _MemoryCardWhiteBorder({
-    required this.imageUrl,
-    required this.text,
-    required this.date,
-  });
+  const _MemoryCardWhiteBorder(
+      {required this.imageUrl, required this.text, required this.date});
 
   @override
   Widget build(BuildContext context) {
@@ -458,27 +751,17 @@ class _MemoryCardWhiteBorder extends StatelessWidget {
             if (imageUrl != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  color: Colors.white,
-                  height: 200,
-                  width: double.infinity,
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: Image.network(imageUrl!),
-                  ),
-                ),
+                child: Image.network(imageUrl!,
+                    height: 200, width: double.infinity, fit: BoxFit.cover),
               ),
             const SizedBox(height: 10),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: kInk,
-                fontSize: 16,
-                height: 1.3,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            Text(text,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: kInk,
+                    fontSize: 16,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -487,10 +770,8 @@ class _MemoryCardWhiteBorder extends StatelessWidget {
                 border: Border.all(color: kBlue.withOpacity(0.25)),
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(
-                'Fecha: ${date.split("T").first}',
-                style: const TextStyle(color: kInk, fontSize: 12.5),
-              ),
+              child: Text('Fecha: ${date.split("T").first}',
+                  style: const TextStyle(color: kInk, fontSize: 12.5)),
             ),
           ],
         ),
@@ -499,265 +780,72 @@ class _MemoryCardWhiteBorder extends StatelessWidget {
   }
 }
 
-/// ─────────────── Tren grande tipo maqueta infantil (3 coches) ───────────────
-class _TrainGraphicV3 extends StatelessWidget {
-  final Animation<double> spin; // ruedas cartoon rápidas
-  const _TrainGraphicV3({required this.spin});
-
-  Widget _wheel({required double left, required double bottom}) {
-    return AnimatedBuilder(
-      animation: spin,
-      builder: (_, __) {
-        final angle = spin.value * math.pi * 4; // rápido
-        return Positioned(
-          left: left,
-          bottom: bottom,
-          child: Transform.rotate(
-            angle: angle,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(width: 28, height: 28, decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle)),
-                Container(width: 16, height: 16, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
-              ],
-            ),
+// ╭──────────────────────────────╮
+// │ Diálogos OK / Confirmación   │
+// ╰──────────────────────────────╯
+Future<void> _showOkDialog(BuildContext c,
+    {required String title, required String message}) async {
+  await showDialog<void>(
+    context: c,
+    builder: (_) => AlertDialog(
+      title: Text(title,
+          style: const TextStyle(fontWeight: FontWeight.w700, color: kInk)),
+      content: Text(message),
+      actions: [
+        TextButton(
+          style: TextButton.styleFrom(
+            backgroundColor: kPurple,
+            foregroundColor: kInk,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-        );
-      },
-    );
-  }
+          onPressed: () => Navigator.pop(c),
+          child: const Text('Aceptar'),
+        )
+      ],
+    ),
+  );
+}
 
-  Widget _connector({required double left, required double bottom}) {
-    return Positioned(
-      left: left,
-      bottom: bottom,
-      child: Container(
-        width: 16,
-        height: 4,
-        decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(2)),
-      ),
-    );
-  }
-
-  Widget _carBody({
-    required double left,
-    required double bottom,
-    required double width,
-    required double height,
-    required Color color,
-    bool hasRoof = false,
-    bool hasWindow = true,
-  }) {
-    return Positioned(
-      left: left,
-      bottom: bottom,
-      child: Stack(
-        children: [
-          Container(
-            width: width,
-            height: height,
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-          ),
-          if (hasRoof)
-            Positioned(
-              top: -8,
-              left: width * 0.08,
-              child: Container(
-                width: width * 0.84,
-                height: 10,
-                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
-              ),
-            ),
-          if (hasWindow)
-            Positioned(
-              top: height * 0.22,
-              left: width * 0.12,
-              child: Container(
-                width: width * 0.28,
-                height: height * 0.44,
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(6)),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chimney({required double left, required double bottom}) {
-    return Positioned(
-      left: left,
-      bottom: bottom,
-      child: Container(width: 22, height: 36, decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6))),
-    );
-  }
-
-  Widget _frontLight({required double left, required double bottom}) {
-    return Positioned(
-      left: left,
-      bottom: bottom,
-      child: Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF7B2),
-          shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: const Color(0xFFFFF7B2).withOpacity(0.6), blurRadius: 10, spreadRadius: 3)],
+Future<bool> _showConfirmDialog(BuildContext c,
+    {required String message}) async {
+  final res = await showDialog<bool>(
+    context: c,
+    builder: (_) => AlertDialog(
+      title: const Text('Confirmar',
+          style: TextStyle(fontWeight: FontWeight.w700, color: kInk)),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(c, false),
+          child: const Text('Cancelar', style: TextStyle(color: kPurple)),
         ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const double baseBottom = 26;
-    const double carW = 118;
-    const double carH = 54;
-
-    const Color locoColor = kPurple;
-    const Color wagonPink = Color(0xFFFF9CA0);
-    const Color wagonBlue = kBlue;
-
-    return SizedBox(
-      width: 420,
-      height: 120,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Locomotora
-          _carBody(left: 60, bottom: baseBottom, width: carW, height: carH, color: locoColor, hasRoof: true, hasWindow: true),
-          Positioned(
-            left: 44,
-            bottom: baseBottom,
-            child: Container(width: 32, height: carH, decoration: BoxDecoration(color: locoColor, borderRadius: BorderRadius.circular(16))),
-          ),
-          _chimney(left: 150, bottom: baseBottom + carH - 6),
-          _frontLight(left: 46, bottom: baseBottom + carH * 0.55),
-          _wheel(left: 82, bottom: baseBottom - 26),
-          _wheel(left: 122, bottom: baseBottom - 26),
-          _wheel(left: 162, bottom: baseBottom - 26),
-
-          // Conector 1
-          _connector(left: 178, bottom: baseBottom + 8),
-
-          // Vagón rosado
-          _carBody(left: 194, bottom: baseBottom, width: carW, height: carH, color: wagonPink, hasRoof: false, hasWindow: false),
-          _wheel(left: 214, bottom: baseBottom - 26),
-          _wheel(left: 274, bottom: baseBottom - 26),
-
-          // Conector 2
-          _connector(left: 312, bottom: baseBottom + 8),
-
-          // Vagón azul
-          _carBody(left: 328, bottom: baseBottom, width: carW, height: carH, color: wagonBlue, hasRoof: false, hasWindow: false),
-          _wheel(left: 348, bottom: baseBottom - 26),
-          _wheel(left: 408, bottom: baseBottom - 26),
-        ],
-      ),
-    );
-  }
+        TextButton(
+          style: TextButton.styleFrom(
+              backgroundColor: kPurple,
+              foregroundColor: kInk,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          onPressed: () => Navigator.pop(c, true),
+          child: const Text('Aceptar'),
+        ),
+      ],
+    ),
+  );
+  return res ?? false;
 }
 
-/// ─────────────── Vía (debajo del tren) ───────────────
-class _TrackPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rail = Paint()
-      ..color = const Color(0xFFB9B9C9)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-
-    final sleeper = Paint()
-      ..color = const Color(0xFF9E9EB2)
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round;
-
-    final yUpper = size.height - 26; // riel superior
-    final yLower = size.height - 18; // riel inferior
-
-    canvas.drawLine(Offset(12, yUpper), Offset(size.width - 12, yUpper), rail);
-    canvas.drawLine(Offset(12, yLower), Offset(size.width - 12, yLower), rail);
-
-    for (double x = 20; x < size.width - 10; x += 18) {
-      canvas.drawLine(Offset(x, yUpper - 4), Offset(x, yLower + 4), sleeper);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// ─────────────── Humo blanco en loop ───────────────
-class _SmokeLoop extends StatelessWidget {
-  final AnimationController controller;
-  final double size;
-  final double phase;
-
-  const _SmokeLoop({
-    required this.controller,
-    required this.size,
-    required this.phase,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        double t = (controller.value + phase) % 1.0;
-        final dy = -32 * t;
-        final scale = 0.7 + 0.7 * t;
-        final opacity = (t < 0.15) ? (t / 0.15) : (1.0 - t);
-
-        return Opacity(
-          opacity: opacity.clamp(0.0, 1.0),
-          child: Transform.translate(
-            offset: Offset(0, dy),
-            child: Transform.scale(
-              scale: scale,
-              child: _SmokePuff(size: size),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _SmokePuff extends StatelessWidget {
-  final double size;
-  const _SmokePuff({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 8, spreadRadius: 2),
-        ],
-      ),
-    );
-  }
-}
-
-/// Estado vacío
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
-
   @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 24),
-        child: Text(
-          'No hay notificaciones pendientes.\n\nPrograma un recuerdo desde el calendario o pulsa “Actualizar”.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: kGrey1, fontSize: 16, height: 1.35),
+  Widget build(BuildContext context) => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'No hay notificaciones pendientes.\n\nPrograma un recuerdo desde el calendario o pulsa “Actualizar”.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: kGrey1, fontSize: 16, height: 1.35),
+          ),
         ),
-      ),
-    );
-  }
+      );
 }

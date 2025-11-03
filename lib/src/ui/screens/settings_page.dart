@@ -1,10 +1,10 @@
-// lib/src/ui/screens/settings_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/patients_service.dart';
 import '../screens/choice_start.dart';
+import '../user_avatar.dart'; // ✅ muestra la foto de perfil
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -18,12 +18,9 @@ class _SettingsPageState extends State<SettingsPage> {
   final _db = FirebaseFirestore.instance;
   late final PatientsService _svc;
 
-  User get _user => FirebaseAuth.instance.currentUser!;
-  String get _uid => _user.uid;
+  User? get _user => FirebaseAuth.instance.currentUser;
+  String? get _uid => _user?.uid;
 
-  // ===========================================================
-  // COLORES UTILIZADOS LOCALMENTE
-  // ===========================================================
   static const kPurple = Color(0xFFD6A7F4);
   static const kBlue = Color(0xFF9ED3FF);
   static const kPink = Color(0xFFFFB3B3);
@@ -43,6 +40,8 @@ class _SettingsPageState extends State<SettingsPage> {
   // FUNCIÓN ELIMINAR CUENTA
   // ===========================================================
   Future<void> _deleteAccount(BuildContext context) async {
+    if (_uid == null || _user == null) return;
+
     final userDoc = await _db.collection('users').doc(_uid).get();
     final data = userDoc.data() ?? {};
     final role = (data['role'] ?? '').toString();
@@ -145,10 +144,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
                         try {
                           final cred = EmailAuthProvider.credential(
-                            email: _user.email!,
+                            email: _user!.email!,
                             password: password,
                           );
-                          await _user.reauthenticateWithCredential(cred);
+                          await _user!.reauthenticateWithCredential(cred);
                           if (ctx.mounted) Navigator.pop(ctx, true);
                         } catch (_) {
                           setState(() {
@@ -178,7 +177,6 @@ class _SettingsPageState extends State<SettingsPage> {
     if (confirm != true) return;
 
     try {
-      // Si es cuidador, liberar consultantes
       if (role == 'Cuidador') {
         final patients = await _db
             .collection('users')
@@ -190,7 +188,11 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       await _db.collection('users').doc(_uid).delete();
-      await _user.delete();
+
+      // 🔹 Guarda UID antes de eliminar (por seguridad)
+      final uidToDelete = _uid;
+
+      await _user?.delete();
 
       if (!mounted) return;
 
@@ -201,6 +203,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (mounted) {
         await showDialog(
           context: context,
+          barrierDismissible: false,
           builder: (_) => AlertDialog(
             backgroundColor: Colors.white,
             shape:
@@ -221,11 +224,17 @@ class _SettingsPageState extends State<SettingsPage> {
                   backgroundColor: kBlue,
                   foregroundColor: kInk,
                 ),
-                onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  ChoiceStart.route,
-                  (_) => false,
-                ),
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await FirebaseAuth.instance.signOut();
+                  if (context.mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      ChoiceStart.route,
+                      (_) => false,
+                    );
+                  }
+                },
                 child: const Text('Aceptar'),
               ),
             ],
@@ -243,7 +252,135 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   // ===========================================================
-  // BLOQUE DEL CUIDADOR (Consultante)
+  // INTERFAZ PRINCIPAL
+  // ===========================================================
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        _buildMainUI(context),
+        if (_showTrashAnim)
+          AnimatedTrashAnimation(
+            onDone: () => setState(() => _showTrashAnim = false),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMainUI(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        elevation: 0,
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        leading: IconButton(
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back_rounded, color: kInk),
+        ),
+        title: const Text(
+          'Ajustes',
+          style:
+              TextStyle(color: kInk, fontSize: 22, fontWeight: FontWeight.w700),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 10),
+                  const UserAvatar(radius: 60), // ✅ avatar agregado
+                  const SizedBox(height: 14),
+
+                  StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: _uid != null
+                        ? _db.collection('users').doc(_uid).snapshots()
+                        : const Stream.empty(),
+                    builder: (context, snap) {
+                      if (!snap.hasData || !snap.data!.exists) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('Usuario no encontrado'),
+                        );
+                      }
+
+                      final me = snap.data!.data() ?? {};
+                      final role = (me['role'] as String?)?.trim() ?? '';
+                      final firstName =
+                          (me['firstName'] as String?)?.trim() ?? '';
+                      final lastName =
+                          (me['lastName'] as String?)?.trim() ?? '';
+                      final caregiverId = me['caregiverId'] as String?;
+                      final myName = [firstName, lastName]
+                          .where((e) => e.isNotEmpty)
+                          .join(' ');
+
+                      return Column(
+                        children: [
+                          Text(
+                            myName,
+                            style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: kInk),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: role == 'Cuidador'
+                                  ? const Color(0xFFF5E9FC)
+                                  : const Color(0xFFE8F5FF),
+                              border: Border.all(
+                                color: role == 'Cuidador'
+                                    ? kPurpleStrong
+                                    : kBlueStrong,
+                                width: 2.0,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              role,
+                              style: TextStyle(
+                                color: role == 'Cuidador'
+                                    ? kPurpleStrong
+                                    : kBlueStrong,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (role == 'Consultante')
+                            _buildCaregiverBlock(caregiverId)
+                          else if (role == 'Cuidador')
+                            _buildConsultantsBlock(_uid ?? ''),
+                          const SizedBox(height: 24),
+                        ],
+                      );
+                    },
+                  ),
+                  const Text('Gestiona tu cuenta',
+                      style: TextStyle(color: Colors.black54)),
+                  const SizedBox(height: 10),
+                  _buildActionButtons(context),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================
+  // BLOQUES Y BOTONES
   // ===========================================================
   Widget _buildCaregiverBlock(String? caregiverId) {
     if (caregiverId == null || caregiverId.isEmpty) {
@@ -293,9 +430,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // ===========================================================
-  // BLOQUE DE CONSULTANTES (Cuidador)
-  // ===========================================================
   Widget _buildConsultantsBlock(String caregiverId) {
     return StreamBuilder<QuerySnapshot>(
       stream: _db
@@ -356,132 +490,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // ===========================================================
-  // INTERFAZ PRINCIPAL
-  // ===========================================================
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        _buildMainUI(context),
-        if (_showTrashAnim)
-          AnimatedTrashAnimation(
-            onDone: () => setState(() => _showTrashAnim = false),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildMainUI(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        leading: IconButton(
-          onPressed: () => Navigator.maybePop(context),
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kInk),
-        ),
-        title: const Text(
-          'Ajustes',
-          style:
-              TextStyle(color: kInk, fontSize: 22, fontWeight: FontWeight.w700),
-        ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    stream: _db.collection('users').doc(_uid).snapshots(),
-                    builder: (context, snap) {
-                      if (!snap.hasData) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: CircularProgressIndicator(),
-                        );
-                      }
-
-                      final me = snap.data!.data() ?? {};
-                      final role =
-                          (me['role'] as String?)?.trim() ?? '';
-                      final firstName =
-                          (me['firstName'] as String?)?.trim() ?? '';
-                      final lastName =
-                          (me['lastName'] as String?)?.trim() ?? '';
-                      final caregiverId = me['caregiverId'] as String?;
-                      final myName = [firstName, lastName]
-                          .where((e) => e.isNotEmpty)
-                          .join(' ');
-
-                      return Column(
-                        children: [
-                          Text(
-                            myName,
-                            style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: kInk),
-                          ),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 18, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: role == 'Cuidador'
-                                  ? const Color(0xFFF5E9FC)
-                                  : const Color(0xFFE8F5FF),
-                              border: Border.all(
-                                color: role == 'Cuidador'
-                                    ? kPurpleStrong
-                                    : kBlueStrong,
-                                width: 2.0,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              role,
-                              style: TextStyle(
-                                color: role == 'Cuidador'
-                                    ? kPurpleStrong
-                                    : kBlueStrong,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          if (role == 'Consultante')
-                            _buildCaregiverBlock(caregiverId)
-                          else if (role == 'Cuidador')
-                            _buildConsultantsBlock(_uid),
-                          const SizedBox(height: 24),
-                        ],
-                      );
-                    },
-                  ),
-                  const Text('Gestiona tu cuenta',
-                      style: TextStyle(color: Colors.black54)),
-                  const SizedBox(height: 10),
-                  _buildActionButtons(context),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ===========================================================
-  // BOTONES DE ACCIÓN
-  // ===========================================================
   Widget _buildActionButtons(BuildContext context) {
     return Column(
       children: [

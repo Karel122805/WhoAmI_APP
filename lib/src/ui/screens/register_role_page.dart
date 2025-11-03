@@ -26,7 +26,7 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
     return (email ?? '').trim();
   }
 
-  /// Muestra una ventana emergente de confirmación
+  /// ---- Ventana emergente de Confirmar rol ----
   Future<bool> _confirmarRol(String role) async {
     return await showDialog<bool>(
           context: context,
@@ -40,7 +40,7 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
               title: const Text(
                 'Confirmar rol',
                 style: TextStyle(
-                  color: kInk,
+                  color: Colors.black,
                   fontWeight: FontWeight.bold,
                   fontSize: 20,
                 ),
@@ -49,32 +49,49 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
                 'Estás a punto de registrarte como "$role".\n\n'
                 'Una vez creada tu cuenta, no podrás cambiar este rol.\n\n'
                 '¿Deseas continuar?',
-                style: const TextStyle(color: kInk, fontSize: 16),
+                style: const TextStyle(color: Colors.black, fontSize: 16),
               ),
               actionsAlignment: MainAxisAlignment.center,
               actions: [
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: kPurple,
-                    foregroundColor: kInk,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    SizedBox(
+                      width: 120,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kPurple,
+                          foregroundColor: Colors.black,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar'),
+                      ),
                     ),
-                  ),
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: kBlue,
-                    foregroundColor: kInk,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    SizedBox(
+                      width: 120,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kBlue,
+                          foregroundColor: Colors.black,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Confirmar'),
+                      ),
                     ),
-                  ),
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Confirmar'),
+                  ],
                 ),
+                const SizedBox(height: 10),
               ],
             );
           },
@@ -82,8 +99,57 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
         false;
   }
 
+  /// ---- Ventana emergente de error personalizado ----
+  Future<void> _showErrorDialog(String message) async {
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        backgroundColor: Colors.white,
+        title: const Text(
+          'Error',
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.black, fontSize: 16),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              
+              SizedBox(
+                width: 120,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kBlue,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Aceptar'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+
   Future<void> _finishSignUp(String role) async {
-    // Primero se confirma el rol seleccionado
     final confirmado = await _confirmarRol(role);
     if (!confirmado) return;
 
@@ -93,27 +159,24 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
     final nombre = (args['nombre'] as String?)?.trim();
     final apellidos = (args['apellidos'] as String?)?.trim();
     final birthdayIso = args['birthday'] as String?;
-    final birthday = birthdayIso != null ? DateTime.tryParse(birthdayIso) : null;
+    final birthday =
+        birthdayIso != null ? DateTime.tryParse(birthdayIso) : null;
 
     final email = emailRaw?.toLowerCase();
 
     if (email == null || password == null || email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Faltan correo o contraseña.')),
-      );
+      await _showErrorDialog('Faltan correo o contraseña.');
       return;
     }
 
     setState(() => _saving = true);
     try {
-      // 1) Crear cuenta en Firebase Auth
       final cred = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
       final uid = cred.user!.uid;
-
-      // 2) Crear documento de usuario en Firestore
       final displayName = _buildDisplayName(nombre, apellidos, email);
+
       final data = <String, dynamic>{
         'email': email,
         'firstName': nombre ?? '',
@@ -133,73 +196,98 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
           .doc(uid)
           .set(data, SetOptions(merge: true));
 
-      // 3) Actualizar displayName en Auth
       await cred.user!.updateDisplayName(displayName);
 
-      // 4) Enviar correo de verificación
       try {
         await cred.user!.sendEmailVerification();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo enviar el correo de verificación. $e')),
-        );
+        await _showErrorDialog('No se pudo enviar el correo de verificación.\n$e');
       }
 
-      // 5) Mostrar ventana de cuenta creada
-      if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (_) {
-            bool _resending = false;
-            return StatefulBuilder(
-              builder: (ctx, setDlg) => AlertDialog(
-                title: const Text('Cuenta creada'),
-                content: Text(
-                  'Tu cuenta se creó correctamente.\n\n'
-                  'Te enviamos un correo a:\n$email\n\n'
-                  'Abre el enlace de verificación para activar tu cuenta antes de iniciar sesión.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: _resending
-                        ? null
-                        : () async {
-                            setDlg(() => _resending = true);
-                            try {
-                              await cred.user!.sendEmailVerification();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Correo de verificación reenviado.')),
-                                );
-                              }
-                            } finally {
-                              if (ctx.mounted) setDlg(() => _resending = false);
-                            }
-                          },
-                    child: _resending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Reenviar'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Aceptar'),
-                  ),
-                ],
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        builder: (ctx) {
+          bool _resending = false;
+          return StatefulBuilder(
+            builder: (ctx, setDlg) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-            );
-          },
-        );
-      }
+              backgroundColor: Colors.white,
+              title: const Text(
+                'Cuenta creada',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+              content: Text(
+                'Tu cuenta se creó correctamente.\n\n'
+                'Te enviamos un correo de verificación a:\n$email\n\n'
+                'Por favor verifica antes de iniciar sesión.',
+                style: const TextStyle(color: Colors.black, fontSize: 16),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _resending
+                      ? null
+                      : () async {
+                          setDlg(() => _resending = true);
+                          try {
+                            await cred.user!.sendEmailVerification();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text(
+                                    'Correo reenviado correctamente.',
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                  backgroundColor: kPurple.withOpacity(0.8),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (ctx.mounted) setDlg(() => _resending = false);
+                          }
+                        },
+                  child: _resending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child:
+                              CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Reenviar correo',
+                          style: TextStyle(
+                              color: kPurple, fontWeight: FontWeight.bold),
+                        ),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kPurple,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Aceptar'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
 
-      // 6) Cerrar sesión y volver al login
       await FirebaseAuth.instance.signOut();
       if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, LoginPage.route, (_) => false);
+        Navigator.pushNamedAndRemoveUntil(
+            context, LoginPage.route, (_) => false);
       }
     } on FirebaseAuthException catch (e) {
       String msg = 'Ocurrió un problema.';
@@ -214,23 +302,9 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
           msg = 'La contraseña es muy débil.';
           break;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg,
-              style:
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          backgroundColor: Colors.red,
-        ),
-      );
+      await _showErrorDialog(msg);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e',
-              style:
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          backgroundColor: Colors.red,
-        ),
-      );
+      await _showErrorDialog('Error: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -239,117 +313,94 @@ class _RegisterRolePageState extends State<RegisterRolePage> {
   @override
   Widget build(BuildContext context) {
     return MediaQuery(
-      data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
+      data: MediaQuery.of(context)
+          .copyWith(textScaler: const TextScaler.linear(1.0)),
       child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: kInk),
+            onPressed: _saving ? null : () => Navigator.maybePop(context),
+          ),
+          centerTitle: true,
+          title: const Text(
+            'Regístrate',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: kInk,
+            ),
+          ),
+        ),
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 8),
-
-                      // Encabezado con botón de volver
-                      SizedBox(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 16),
+                    const Align(child: BrandLogo(size: 170)),
+                    const SizedBox(height: 22),
+                    const Text(
+                      'Selecciona un tipo de usuario',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: kInk,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Align(
+                      child: SizedBox(
+                        width: 296,
                         height: 56,
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              left: 0,
-                              top: 8,
-                              child: IconButton.filled(
-                                style: IconButton.styleFrom(
-                                  backgroundColor: const Color(0xFFEAEAEA),
-                                  shape: const CircleBorder(),
-                                  fixedSize: const Size(40, 40),
-                                ),
-                                onPressed: _saving ? null : () => Navigator.maybePop(context),
-                                icon: const Icon(Icons.arrow_back, color: kInk),
-                              ),
-                            ),
-                            const Center(
-                              child: Text(
-                                'Regístrate',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  color: kInk,
-                                ),
-                              ),
-                            ),
-                          ],
+                        child: FilledButton(
+                          style: pillLav(),
+                          onPressed:
+                              _saving ? null : () => _finishSignUp('Cuidador'),
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(),
+                                )
+                              : const Text('Cuidador'),
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      const Align(child: BrandLogo(size: 170)),
-                      const SizedBox(height: 22),
-
-                      const Text(
-                        'Selecciona un tipo\nde usuario',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: kInk),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Botón para rol: Cuidador
-                      Align(
-                        child: SizedBox(
-                          width: 296,
-                          height: 56,
-                          child: FilledButton(
-                            style: pillLav(),
-                            onPressed: _saving
-                                ? null
-                                : () => _finishSignUp('Cuidador'),
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(),
-                                  )
-                                : const Text('Cuidador'),
-                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Center(
+                      child:
+                          Text('O', style: TextStyle(fontSize: 18, color: kInk)),
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      child: SizedBox(
+                        width: 296,
+                        height: 56,
+                        child: FilledButton(
+                          style: pillBlue(),
+                          onPressed:
+                              _saving ? null : () => _finishSignUp('Consultante'),
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(),
+                                )
+                              : const Text('Consultante'),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      const Center(
-                        child: Text(
-                          'O',
-                          style: TextStyle(fontSize: 18, color: kInk),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Botón para rol: Consultante
-                      Align(
-                        child: SizedBox(
-                          width: 296,
-                          height: 56,
-                          child: FilledButton(
-                            style: pillBlue(),
-                            onPressed: _saving
-                                ? null
-                                : () => _finishSignUp('Consultante'),
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(),
-                                  )
-                                : const Text('Consultante'),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 28),
+                  ],
                 ),
               ),
             ),

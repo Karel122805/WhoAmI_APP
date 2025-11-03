@@ -1,3 +1,4 @@
+// lib/src/ui/screens/register_patient_page.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +34,6 @@ class _RegisterPatientPageState extends State<RegisterPatientPage> {
     super.dispose();
   }
 
-  // Formatear fecha
   String _fmtBirthday(dynamic value) {
     if (value is Timestamp) {
       final d = value.toDate();
@@ -50,7 +50,24 @@ class _RegisterPatientPageState extends State<RegisterPatientPage> {
   Widget build(BuildContext context) {
     if (caregiverId == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Registrar nuevo paciente')),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: kInk),
+            onPressed: () => Navigator.maybePop(context),
+          ),
+          centerTitle: true,
+          title: const Text(
+            'Regístrate',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: kInk,
+            ),
+          ),
+        ),
         body: const Center(child: Text('Inicia sesión para continuar')),
       );
     }
@@ -60,207 +77,232 @@ class _RegisterPatientPageState extends State<RegisterPatientPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
-        centerTitle: true,
-        title: const Text('Registrar nuevo paciente'),
         backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        elevation: 0.5,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: kInk),
           onPressed: () => Navigator.maybePop(context),
-          icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
+        ),
+        centerTitle: true,
+        title: const Text(
+          'Regístrate',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: kInk,
+          ),
         ),
       ),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 10),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
 
-                      // Campo de búsqueda
-                      TextField(
-                        controller: _searchCtrl,
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          hintText: 'Buscar consultante',
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close),
-                                  onPressed: () => _searchCtrl.clear(),
-                                )
-                              : const Icon(Icons.search),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
+                  const Text(
+                    'Registrar nuevo paciente',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: kInk,
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  // ===== Campo de búsqueda =====
+                  TextField(
+                    controller: _searchCtrl,
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar consultante',
+                      suffixIcon: _searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => _searchCtrl.clear(),
+                            )
+                          : const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
 
-                      // Lista de consultantes
-                      Expanded(
-                        child: StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-                          stream: _svc.streamUnassignedConsultants(q: q),
-                          builder: (context, snap) {
-                            if (snap.hasError) {
-                              return Center(child: Text('Error: ${snap.error}'));
+                  const SizedBox(height: 12),
+
+                  // ===== Lista de consultantes =====
+                  Expanded(
+                    child: StreamBuilder<
+                        List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+                      stream: _svc.streamUnassignedConsultants(q: q),
+                      builder: (context, snap) {
+                        if (snap.hasError) {
+                          return Center(child: Text('Error: ${snap.error}'));
+                        }
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+
+                        final docs = snap.data ?? [];
+                        if (docs.isEmpty) {
+                          return const Center(child: Text('Sin resultados'));
+                        }
+
+                        return ListView.separated(
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (context, i) {
+                            final data = docs[i].data();
+                            if ((data['role'] ?? '') != 'Consultante') {
+                              return const SizedBox.shrink();
                             }
-                            if (snap.connectionState == ConnectionState.waiting) {
-                              return const Center(child: CircularProgressIndicator());
-                            }
 
-                            final docs = snap.data ?? [];
-                            if (docs.isEmpty) return const Center(child: Text('Sin resultados'));
+                            final uid = docs[i].id;
+                            final name = (data['displayName'] ??
+                                    '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}')
+                                .toString()
+                                .trim();
+                            final birthday = _fmtBirthday(data['birthday']);
 
-                            return ListView.separated(
-                              itemCount: docs.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 8),
-                              itemBuilder: (context, i) {
-                                final data = docs[i].data();
-                                if ((data['role'] ?? '') != 'Consultante') {
-                                  return const SizedBox.shrink();
-                                }
-
-                                final uid = docs[i].id;
-                                final name = (data['displayName'] ??
-                                        '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}')
-                                    .toString()
-                                    .trim();
-                                final birthday = _fmtBirthday(data['birthday']);
-
-                                return _PatientResultTile(
-                                  name: name.isEmpty ? 'Usuario' : name,
-                                  subtitle: birthday,
-                                  selected: uid == _selectedPatientId,
-                                  onAdd: () {
-                                    setState(() {
-                                      _selectedPatientId = uid;
-                                    });
-                                  },
-                                );
+                            return _PatientResultTile(
+                              name: name.isEmpty ? 'Usuario' : name,
+                              subtitle: birthday,
+                              selected: uid == _selectedPatientId,
+                              onAdd: () {
+                                setState(() {
+                                  _selectedPatientId = uid;
+                                });
                               },
                             );
                           },
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ===== Botón Guardar =====
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            if (_selectedPatientId == null) return;
+                            final id = caregiverId!;
+                            try {
+                              await _svc.addPatientToCaregiver(
+                                caregiverId: id,
+                                patientUserId: _selectedPatientId!,
+                              );
+                              if (!mounted) return;
+                              _showDialog(context, 'Hecho',
+                                  'Paciente agregado correctamente.');
+                            } catch (e) {
+                              if (!mounted) return;
+                              _showDialog(context, 'Error', e.toString());
+                            }
+                          },
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              color: _selectedPatientId == null
+                                  ? const Color(0xFFDCEEFF)
+                                  : const Color(0xFF9ED3FF),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.save, size: 18, color: kInk),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Guardar',
+                                  style: TextStyle(
+                                    color: kInk,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      // Botón Guardar
-                      Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () async {
-                                if (_selectedPatientId == null) return;
-                                final id = caregiverId!;
-                                try {
-                                  await _svc.addPatientToCaregiver(
-                                    caregiverId: id,
-                                    patientUserId: _selectedPatientId!,
-                                  );
-                                  if (!mounted) return;
-                                  _showDialog(context, 'Hecho', 'Paciente agregado correctamente.');
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  _showDialog(context, 'Error', e.toString());
-                                }
-                              },
-                              child: Container(
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: _selectedPatientId == null
-                                      ? const Color(0xFFDCEEFF) // azul pastel suave
-                                      : const Color(0xFF9ED3FF), // azul base
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.save, size: 18, color: kInk),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Guardar',
-                                      style: const TextStyle(
-                                        color: kInk,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 10),
-
-                      // Botón Cancelar
-                      Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                if (_selectedPatientId == null) return;
-                                Navigator.pop(context);
-                              },
-                              child: Container(
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: _selectedPatientId == null
-                                      ? const Color(0xFFFFE4E4) // rosa pastel suave
-                                      : const Color(0xFFFFB3B3), // rosa base
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.cancel_outlined, size: 18, color: kInk),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Cancelar',
-                                      style: const TextStyle(
-                                        color: kInk,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
-                ),
+
+                  const SizedBox(height: 10),
+
+                  // ===== Botón Cancelar =====
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              color: _selectedPatientId == null
+                                  ? const Color(0xFFFFE4E4)
+                                  : const Color(0xFFFFB3B3),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.cancel_outlined,
+                                    size: 18, color: kInk),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Cancelar',
+                                  style: TextStyle(
+                                    color: kInk,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+                ],
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
   }
 
-  // Diálogo informativo
   void _showDialog(BuildContext context, String title, String message) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFFF4EDFB),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(title, style: const TextStyle(color: kInk, fontWeight: FontWeight.w700)),
+        title: Text(
+          title,
+          style: const TextStyle(color: kInk, fontWeight: FontWeight.w700),
+        ),
         content: Text(message, style: const TextStyle(color: kInk)),
         actions: [
           Center(
@@ -268,8 +310,10 @@ class _RegisterPatientPageState extends State<RegisterPatientPage> {
               style: FilledButton.styleFrom(
                 backgroundColor: kPurple,
                 foregroundColor: kInk,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30)),
               ),
               onPressed: () {
                 Navigator.of(ctx, rootNavigator: true).pop();
@@ -284,7 +328,7 @@ class _RegisterPatientPageState extends State<RegisterPatientPage> {
   }
 }
 
-// Tarjeta de resultado
+// ===== Tarjeta de resultado =====
 class _PatientResultTile extends StatelessWidget {
   const _PatientResultTile({
     required this.name,
@@ -318,10 +362,17 @@ class _PatientResultTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
                   const SizedBox(height: 4),
                   if (subtitle.isNotEmpty)
-                    Text(subtitle, style: const TextStyle(color: Colors.black54)),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
                 ],
               ),
             ),
